@@ -4,22 +4,27 @@ import 'package:flutter/material.dart';
 
 import '../../core/hex_color.dart';
 import '../model/design_element.dart';
-import '../model/project.dart';
 
 /// Renders the page background and every element through a single CustomPainter,
-/// in zIndex order, applying per-element rotation + opacity (CLAUDE.md §7).
+/// in zIndex order, applying per-element rotation + opacity (CLAUDE.md §7). Used
+/// both on-screen and (via SceneRasterizer) for PNG/PDF export of any page.
 class ScenePainter extends CustomPainter {
   ScenePainter({
-    required this.project,
+    required this.elements,
     required this.images,
     this.selectedId,
     this.showSelection = true,
   });
 
-  final Project project;
+  final List<DesignElement> elements;
   final Map<String, ui.Image> images;
   final String? selectedId;
   final bool showSelection;
+
+  List<DesignElement> get _byZ {
+    final sorted = [...elements]..sort((a, b) => a.zIndex.compareTo(b.zIndex));
+    return sorted;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -29,7 +34,7 @@ class ScenePainter extends CustomPainter {
       Paint()..color = Colors.white,
     );
 
-    for (final element in project.elementsByZ) {
+    for (final element in _byZ) {
       _paintElement(canvas, element);
     }
   }
@@ -190,7 +195,7 @@ class ScenePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ScenePainter old) =>
-      old.project != project ||
+      old.elements != elements ||
       old.images != images ||
       old.selectedId != selectedId ||
       old.showSelection != showSelection;

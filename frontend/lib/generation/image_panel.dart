@@ -112,8 +112,10 @@ class _ImagePanelState extends ConsumerState<ImagePanel> {
   }
 
   void _placeImage(String assetId) {
-    final project = ref.read(editorControllerProvider).project;
-    if (project == null) {
+    final editor = ref.read(editorControllerProvider);
+    final project = editor.project;
+    final page = editor.currentPage;
+    if (project == null || page == null) {
       return;
     }
     // Fit the generated image within ~60% of the canvas, centered.
@@ -131,7 +133,7 @@ class _ImagePanelState extends ConsumerState<ImagePanel> {
             width: w,
             height: h,
             assetId: assetId,
-            zIndex: project.nextZIndex,
+            zIndex: page.nextZIndex,
           ),
         );
     _toast('Image added to canvas');

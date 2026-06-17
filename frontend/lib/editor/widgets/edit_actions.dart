@@ -70,7 +70,7 @@ class _EditActionsState extends ConsumerState<EditActions> {
   /// Add a VideoElement next to the source image (image-to-video).
   void _addVideo(String videoAssetId) {
     final notifier = ref.read(editorControllerProvider.notifier);
-    final project = ref.read(editorControllerProvider).project;
+    final page = ref.read(editorControllerProvider).currentPage;
     final el = widget.element;
     notifier.addElement(
       DesignElement.video(
@@ -80,7 +80,7 @@ class _EditActionsState extends ConsumerState<EditActions> {
         width: el.width,
         height: el.height,
         assetId: videoAssetId,
-        zIndex: project?.nextZIndex ?? el.zIndex + 1,
+        zIndex: page?.nextZIndex ?? el.zIndex + 1,
       ),
     );
   }

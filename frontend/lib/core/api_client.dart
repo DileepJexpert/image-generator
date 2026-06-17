@@ -48,20 +48,27 @@ class ApiClient {
   }
 
   /// Loads a project, returning the scene model. Falls back to an empty scene
-  /// when the project has never been saved.
+  /// when the project has never been saved, and upgrades older single-page
+  /// saves (top-level `elements`) into the multi-page shape.
   Future<Project> getProject(String id) async {
     final res = await _dio.get<Map<String, dynamic>>('/projects/$id');
     final data = res.data!;
     final scene = data['sceneJson'] as Map<String, dynamic>?;
     if (scene != null) {
-      return Project.fromJson(scene);
+      final normalized = Map<String, dynamic>.of(scene);
+      if (normalized['pages'] == null && normalized['elements'] != null) {
+        normalized['pages'] = [
+          {'id': '${scene['id'] ?? id}_p0', 'elements': normalized.remove('elements')},
+        ];
+      }
+      return Project.fromJson(normalized).ensureHasPage();
     }
     return Project(
       id: data['id'] as String,
       name: data['name'] as String,
       canvasWidth: (data['canvasWidth'] as num).toInt(),
       canvasHeight: (data['canvasHeight'] as num).toInt(),
-    );
+    ).ensureHasPage();
   }
 
   /// Autosave target: PUT the full scene.

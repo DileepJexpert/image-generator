@@ -7,13 +7,11 @@ import 'element_geometry.dart';
 import 'image_cache.dart';
 import 'scene_painter.dart';
 
-/// The interactive design surface: a fixed-size canvas (wrapped in a
-/// [RepaintBoundary] for PNG export) inside an [InteractiveViewer] for pan/zoom.
-/// Tap selects; dragging the body moves; corner/rotation handles transform.
+/// The interactive design surface: a fixed-size canvas inside an
+/// [InteractiveViewer] for pan/zoom. Tap selects; dragging the body moves;
+/// corner/rotation handles transform. Renders the active page.
 class EditorCanvas extends ConsumerWidget {
-  const EditorCanvas({super.key, required this.exportKey});
-
-  final GlobalKey exportKey;
+  const EditorCanvas({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -21,14 +19,15 @@ class EditorCanvas extends ConsumerWidget {
     final controller = ref.read(editorControllerProvider.notifier);
     final images = ref.watch(imageCacheProvider);
     final project = editor.project;
+    final page = editor.currentPage;
 
-    if (project == null) {
+    if (project == null || page == null) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    // Ensure decoded images exist for every image/video element.
+    // Ensure decoded images exist for every image/video element on this page.
     final cache = ref.read(imageCacheProvider.notifier);
-    for (final e in project.elements) {
+    for (final e in page.elements) {
       final assetId = e.assetIdOrNull;
       if (assetId != null) {
         cache.ensure(assetId);
@@ -49,30 +48,26 @@ class EditorCanvas extends ConsumerWidget {
         child: Padding(
           padding: const EdgeInsets.all(300),
           child: RepaintBoundary(
-            key: exportKey,
             child: SizedBox(
               width: canvasSize.width,
               height: canvasSize.height,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  // 1) Rendered scene.
                   Positioned.fill(
                     child: CustomPaint(
                       painter: ScenePainter(
-                        project: project,
+                        elements: page.elements,
                         images: images,
                         selectedId: editor.selectedId,
                       ),
                     ),
                   ),
-
-                  // 2) Selection + move gestures (below the handles).
                   Positioned.fill(
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTapDown: (d) =>
-                          controller.select(hitTest(project.elements, d.localPosition)),
+                          controller.select(hitTest(page.elements, d.localPosition)),
                       onPanUpdate: (d) {
                         final id = editor.selectedId;
                         if (id != null) {
@@ -82,8 +77,6 @@ class EditorCanvas extends ConsumerWidget {
                       },
                     ),
                   ),
-
-                  // 3) Transform handles for the selected element (on top).
                   if (selected != null)
                     Positioned.fill(
                       child: TransformHandles(

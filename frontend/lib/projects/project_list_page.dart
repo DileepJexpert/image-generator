@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/api_client.dart';
+import '../editor/model/project.dart';
+import '../editor/templates/templates.dart';
 
 /// Loads the project list from the backend.
 final projectListProvider = FutureProvider<List<ProjectSummary>>((ref) {
@@ -59,62 +61,118 @@ class ProjectListPage extends ConsumerWidget {
   }
 
   Future<void> _createDialog(BuildContext context, WidgetRef ref) async {
-    final nameCtrl = TextEditingController(text: 'Untitled');
-    int width = 1080;
-    int height = 1080;
-
-    final created = await showDialog<bool>(
+    final created = await showDialog<_NewProjectSpec>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('New project'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: 'Name'),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: '1080x1080',
-              decoration: const InputDecoration(labelText: 'Canvas size'),
-              items: const [
-                DropdownMenuItem(value: '1080x1080', child: Text('Square 1080×1080')),
-                DropdownMenuItem(value: '1080x1920', child: Text('Story 1080×1920')),
-                DropdownMenuItem(value: '1920x1080', child: Text('Landscape 1920×1080')),
-                DropdownMenuItem(value: '794x1123', child: Text('A4 794×1123')),
-              ],
-              onChanged: (v) {
-                final parts = (v ?? '1080x1080').split('x');
-                width = int.parse(parts[0]);
-                height = int.parse(parts[1]);
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
+      builder: (context) => const _NewProjectDialog(),
     );
-
-    if (created != true || !context.mounted) {
+    if (created == null || !context.mounted) {
       return;
     }
-    final summary = await ref
-        .read(apiClientProvider)
-        .createProject(nameCtrl.text.trim().isEmpty ? 'Untitled' : nameCtrl.text.trim(),
-            width, height);
+
+    final api = ref.read(apiClientProvider);
+    final summary = await api.createProject(created.name, created.width, created.height);
+
+    // Seed the scene from the chosen template, then save it.
+    final project = Project(
+      id: summary.id,
+      name: created.name,
+      canvasWidth: created.width,
+      canvasHeight: created.height,
+      pages: created.template.build(created.width, created.height),
+    );
+    await api.saveProject(project);
+
     ref.invalidate(projectListProvider);
     if (context.mounted) {
       context.go('/editor/${summary.id}');
     }
+  }
+}
+
+class _NewProjectSpec {
+  _NewProjectSpec(this.name, this.width, this.height, this.template);
+  final String name;
+  final int width;
+  final int height;
+  final DesignTemplate template;
+}
+
+const _sizePresets = {
+  'Square 1080×1080': [1080, 1080],
+  'Story 1080×1920': [1080, 1920],
+  'Landscape 1920×1080': [1920, 1080],
+  'A4 794×1123': [794, 1123],
+};
+
+class _NewProjectDialog extends StatefulWidget {
+  const _NewProjectDialog();
+
+  @override
+  State<_NewProjectDialog> createState() => _NewProjectDialogState();
+}
+
+class _NewProjectDialogState extends State<_NewProjectDialog> {
+  final _name = TextEditingController(text: 'Untitled');
+  String _size = _sizePresets.keys.first;
+  DesignTemplate _template = kTemplates.first;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('New project'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(labelText: 'Name'),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _size,
+              decoration: const InputDecoration(labelText: 'Canvas size'),
+              items: [
+                for (final key in _sizePresets.keys)
+                  DropdownMenuItem(value: key, child: Text(key)),
+              ],
+              onChanged: (v) => setState(() => _size = v ?? _size),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<DesignTemplate>(
+              initialValue: _template,
+              decoration: const InputDecoration(labelText: 'Template'),
+              items: [
+                for (final t in kTemplates)
+                  DropdownMenuItem(value: t, child: Text(t.name)),
+              ],
+              onChanged: (v) => setState(() => _template = v ?? _template),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            final dims = _sizePresets[_size]!;
+            final name = _name.text.trim().isEmpty ? 'Untitled' : _name.text.trim();
+            Navigator.pop(
+                context, _NewProjectSpec(name, dims[0], dims[1], _template));
+          },
+          child: const Text('Create'),
+        ),
+      ],
+    );
   }
 }
