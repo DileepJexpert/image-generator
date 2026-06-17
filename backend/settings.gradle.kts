@@ -1,1 +1,0 @@
-rootProject.name = "katixo-studio"

@@ -4,11 +4,12 @@
 .idea/
 .vscode/
 
-# Backend (Gradle / Java)
-backend/.gradle/
-backend/build/
+# Backend (Maven / Java)
+backend/target/
 backend/bin/
 backend/out/
+# Maven wrapper: keep mvnw/.mvn, ignore the downloaded distribution cache
+.mvn/wrapper/maven-wrapper.jar
 
 # Frontend (Flutter)
 frontend/.dart_tool/

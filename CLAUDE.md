@@ -54,7 +54,7 @@ Use the latest stable of each unless a specific pin is given.
 * Spring Web, Spring Data JPA, Spring WebSocket
 * Flyway (schema), PostgreSQL 16 driver
 * Redis (Spring Data Redis / Lettuce) for the job queue
-* Gradle (Kotlin DSL) build
+* Maven build (Spring Boot starter parent)
 
 **Frontend**
 * Flutter (latest stable channel), targeting Web
@@ -81,7 +81,7 @@ katixo-studio/
 ├── CLAUDE.md
 ├── docker-compose.yml
 ├── backend/                      # Spring Boot monolith
-│   ├── build.gradle.kts
+│   ├── pom.xml
 │   └── src/main/java/com/katixo/studio/
 │       ├── StudioApplication.java
 │       ├── config/               # web, ws, redis, cors
