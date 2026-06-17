@@ -1,5 +1,6 @@
 package com.katixo.studio.generation;
 
+import com.katixo.studio.job.JobIdResponse;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;

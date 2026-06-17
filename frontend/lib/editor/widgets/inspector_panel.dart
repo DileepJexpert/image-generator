@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../model/design_element.dart';
 import '../state/editor_controller.dart';
+import 'edit_actions.dart';
 
 /// Right-hand properties panel for the selected element. Edits flow back through
 /// [EditorController] (CLAUDE.md §7: mutate via the Riverpod notifier).
@@ -27,6 +28,10 @@ class InspectorPanel extends ConsumerWidget {
                 const SizedBox(height: 12),
                 if (selected is TextElement) ...[
                   _TextEditor(element: selected, controller: controller),
+                  const Divider(height: 28),
+                ],
+                if (selected is ImageElement) ...[
+                  EditActions(element: selected),
                   const Divider(height: 28),
                 ],
                 _SliderRow(

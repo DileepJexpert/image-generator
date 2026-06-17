@@ -1,11 +1,11 @@
 # Katixo Studio — local studio stack.
 #
-# Services: postgres, redis, comfyui (GPU), backend (Spring Boot monolith),
-# frontend (Flutter Web). The rembg/esrgan sidecars arrive in later milestones.
+# Services: postgres, redis, comfyui (GPU), rembg (CPU), esrgan (GPU),
+# backend (Spring Boot monolith), frontend (Flutter Web).
 #
-# comfyui requires the host to have nvidia-container-toolkit. On a machine
-# without an NVIDIA GPU, bring up everything except it:
-#   docker compose up postgres redis backend frontend
+# comfyui + esrgan require the host to have nvidia-container-toolkit. On a
+# machine without an NVIDIA GPU, bring up the always-runnable subset:
+#   docker compose up postgres redis rembg backend frontend
 
 services:
   postgres:
@@ -51,6 +51,28 @@ services:
               count: 1
               capabilities: ["gpu"]
 
+  rembg:
+    build:
+      context: ./media/rembg
+    ports:
+      - "7000:7000"
+    volumes:
+      # Persist the downloaded u2net model across restarts.
+      - rembg_models:/root/.u2net
+
+  esrgan:
+    build:
+      context: ./media/esrgan
+    ports:
+      - "7001:7001"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
+
   backend:
     build:
       context: ./backend
@@ -60,6 +82,10 @@ services:
       redis:
         condition: service_healthy
       comfyui:
+        condition: service_started
+      rembg:
+        condition: service_started
+      esrgan:
         condition: service_started
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/katixo
@@ -94,3 +120,4 @@ volumes:
   asset_data:
   comfyui_models:
   comfyui_output:
+  rembg_models:

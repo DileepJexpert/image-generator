@@ -1,4 +1,4 @@
-package com.katixo.studio.generation;
+package com.katixo.studio.job;
 
 import java.util.UUID;
 

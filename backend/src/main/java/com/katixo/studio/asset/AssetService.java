@@ -58,6 +58,23 @@ public class AssetService {
         return repository.save(asset);
     }
 
+    /** Store the PNG output of a media edit (rembg/upscale), reading its dimensions. */
+    @Transactional
+    public Asset saveImageResult(byte[] bytes, UUID sourceJobId) {
+        Integer width = null;
+        Integer height = null;
+        try {
+            BufferedImage img = ImageIO.read(new ByteArrayInputStream(bytes));
+            if (img != null) {
+                width = img.getWidth();
+                height = img.getHeight();
+            }
+        } catch (IOException ignored) {
+            // Store without dimensions if undecodable.
+        }
+        return saveImage(bytes, "image/png", sourceJobId, width, height);
+    }
+
     @Transactional(readOnly = true)
     public Optional<Asset> find(UUID id) {
         return repository.findById(id);

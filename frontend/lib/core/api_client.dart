@@ -99,6 +99,20 @@ class ApiClient {
     return res.data!['jobId'] as String;
   }
 
+  // --- Edits (return a jobId) ----------------------------------------------
+
+  Future<String> removeBackground(String assetId) async {
+    final res = await _dio.post<Map<String, dynamic>>('/edit/remove-bg',
+        data: {'assetId': assetId});
+    return res.data!['jobId'] as String;
+  }
+
+  Future<String> upscale(String assetId, int scale) async {
+    final res = await _dio.post<Map<String, dynamic>>('/edit/upscale',
+        data: {'assetId': assetId, 'scale': scale});
+    return res.data!['jobId'] as String;
+  }
+
   // --- Assets --------------------------------------------------------------
 
   /// Uploads image bytes and returns the new asset id.
