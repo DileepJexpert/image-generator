@@ -26,3 +26,13 @@ frontend/.packages
 # Local data / assets
 data/
 *.log
+
+# ComfyUI host bind mounts: keep the folder structure (.gitkeep) but never
+# commit the multi-GB checkpoints or generated outputs.
+media/comfyui/models/**
+!media/comfyui/models/
+!media/comfyui/models/**/
+!media/comfyui/models/**/.gitkeep
+media/comfyui/output/**
+!media/comfyui/output/
+!media/comfyui/output/.gitkeep
