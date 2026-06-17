@@ -143,7 +143,7 @@ WS     /ws/jobs/{jobId}                 # progress events: {progress, status, re
 ```
 
 **ComfyUI integration (generation feature)**
-* Store ComfyUI workflow graphs as JSON templates under `generation/workflows/` (e.g. `text2img_sdxl.json`, `img2video_ltx.json`).
+* Store ComfyUI workflow graphs as JSON templates under `generation/workflows/` (e.g. `text2img.json`, `img2video_ltx.json`).
 * The `ComfyUiClient` injects params (prompt, seed, width, height, source image) into the template, then:
    1. `POST /prompt` to ComfyUI → receive `prompt_id`.
    2. Track progress via ComfyUI's `/ws` channel, mirror it onto our job's WebSocket.
@@ -225,7 +225,7 @@ jobs(id uuid pk, type text,              -- image | image_to_video | remove_bg |
 ## 11. Build milestones (do these in order; stop and confirm after each)
 
 1. **Skeleton.** Monorepo + `backend/docker-compose.yml` (postgres, redis, empty backend with health check, Flutter web shell that loads). Flyway V1 creates the three tables. Acceptance: `docker compose up` runs; `/actuator/health` is UP; Flutter shell renders.
-2. **Generation spine.** ComfyUI in compose; `text2img_sdxl.json` template; `POST /generate/image` → job → ComfyUI → asset stored → job `done`; WS emits progress. Acceptance: a curl call produces a saved PNG and a completed job.
+2. **Generation spine.** ComfyUI in compose; `text2img.json` template; `POST /generate/image` → job → ComfyUI → asset stored → job `done`; WS emits progress. Acceptance: a curl call produces a saved PNG and a completed job.
 3. **Editor core.** Scene model (freezed), CustomPainter render, add text + upload image, move/resize/rotate, save/load project, export PNG. Acceptance: build a 2-element design, reload it, export it.
 4. **Generate-into-canvas.** Image panel wired end-to-end; generated image lands on the canvas as an `ImageElement`. Acceptance: type prompt → image appears on canvas.
 5. **Edit tools.** Remove-bg + upscale services and buttons on selected images.

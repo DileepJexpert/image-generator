@@ -18,18 +18,20 @@ class _SizeOption {
   final int height;
 }
 
+// Defaults are SD 1.5-friendly (512px native) so generation is fast and fits an
+// 8GB GPU; larger sizes remain available for bigger cards / SDXL.
 const _sizes = [
+  _SizeOption('Square 512²', 512, 512),
+  _SizeOption('Portrait 512×768', 512, 768),
+  _SizeOption('Landscape 768×512', 768, 512),
+  _SizeOption('Square 768²', 768, 768),
   _SizeOption('Square 1024²', 1024, 1024),
-  _SizeOption('Portrait 832×1216', 832, 1216),
-  _SizeOption('Landscape 1216×832', 1216, 832),
-  _SizeOption('Small 768²', 768, 768),
 ];
 
 /// label -> ComfyUI checkpoint filename (must exist in ComfyUI's models dir).
 const _models = {
+  'SD 1.5': 'v1-5-pruned-emaonly.safetensors',
   'SDXL Base': 'sd_xl_base_1.0.safetensors',
-  'SDXL Lightning (fast)': 'sdxl_lightning_8step.safetensors',
-  'DreamShaper XL': 'dreamshaperXL.safetensors',
 };
 
 /// The image AI panel (CLAUDE.md §7): prompt + size + model → POST

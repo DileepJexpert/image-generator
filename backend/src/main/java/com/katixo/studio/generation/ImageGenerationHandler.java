@@ -18,7 +18,7 @@ import java.security.SecureRandom;
 @Component
 public class ImageGenerationHandler implements JobHandler {
 
-    private static final String DEFAULT_CHECKPOINT = "sd_xl_base_1.0.safetensors";
+    private static final String DEFAULT_CHECKPOINT = "v1-5-pruned-emaonly.safetensors";
 
     private final ComfyUiClient comfyUiClient;
     private final AssetService assetService;
