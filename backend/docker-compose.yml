@@ -1,5 +1,9 @@
 # Katixo Studio — local studio stack.
 #
+# This file lives in backend/ for one-click "up" from IntelliJ, but it
+# orchestrates the whole monorepo: build contexts are relative to this
+# directory (backend is ".", the others are "../media/*" and "../frontend").
+#
 # Services: postgres, redis, comfyui (GPU), rembg (CPU), esrgan (GPU),
 # backend (Spring Boot monolith), frontend (Flutter Web).
 #
@@ -36,7 +40,7 @@ services:
 
   comfyui:
     build:
-      context: ./media/comfyui
+      context: ../media/comfyui
     ports:
       - "8188:8188"
     volumes:
@@ -53,7 +57,7 @@ services:
 
   rembg:
     build:
-      context: ./media/rembg
+      context: ../media/rembg
     ports:
       - "7000:7000"
     volumes:
@@ -62,7 +66,7 @@ services:
 
   esrgan:
     build:
-      context: ./media/esrgan
+      context: ../media/esrgan
     ports:
       - "7001:7001"
     deploy:
@@ -75,7 +79,7 @@ services:
 
   backend:
     build:
-      context: ./backend
+      context: .
     depends_on:
       postgres:
         condition: service_healthy
@@ -109,7 +113,7 @@ services:
 
   frontend:
     build:
-      context: ./frontend
+      context: ../frontend
     depends_on:
       - backend
     ports:
