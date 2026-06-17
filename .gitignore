@@ -16,6 +16,11 @@ frontend/.flutter-plugins
 frontend/.flutter-plugins-dependencies
 frontend/build/
 frontend/.packages
+frontend/pubspec.lock
+
+# Generated sources (recreated by build_runner; the Docker build regenerates them)
+frontend/**/*.freezed.dart
+frontend/**/*.g.dart
 
 # Local data / assets
 data/

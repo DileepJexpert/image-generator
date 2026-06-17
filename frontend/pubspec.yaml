@@ -13,15 +13,27 @@ dependencies:
   # State management
   flutter_riverpod: ^2.5.1
 
-  # HTTP + WebSocket (used from later milestones)
+  # Immutable models + JSON (the scene save format)
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # HTTP + WebSocket
   dio: ^5.7.0
   web_socket_channel: ^3.0.1
 
   # Routing
   go_router: ^14.2.7
 
+  # File picking (image upload) — works on Flutter Web
+  file_picker: ^8.1.2
+
 dev_dependencies:
   flutter_lints: ^4.0.0
+
+  # Code generation for freezed models
+  build_runner: ^2.4.13
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
 
 flutter:
   uses-material-design: true
