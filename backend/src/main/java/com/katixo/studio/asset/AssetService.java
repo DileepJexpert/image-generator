@@ -75,6 +75,16 @@ public class AssetService {
         return saveImage(bytes, "image/png", sourceJobId, width, height);
     }
 
+    /** Store a generated video clip. */
+    @Transactional
+    public Asset saveVideo(byte[] bytes, String mime, UUID sourceJobId, Integer width, Integer height) {
+        UUID id = UUID.randomUUID();
+        String filename = id + extensionFor(mime, null);
+        String key = storage.store(bytes, filename);
+        Asset asset = new Asset(id, AssetType.VIDEO, key, mime, width, height, sourceJobId);
+        return repository.save(asset);
+    }
+
     @Transactional(readOnly = true)
     public Optional<Asset> find(UUID id) {
         return repository.findById(id);

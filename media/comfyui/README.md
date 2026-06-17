@@ -19,6 +19,17 @@ sd_xl_base_1.0.safetensors
 Override the checkpoint per request with the `model` field of
 `POST /api/v1/generate/image`.
 
+### Image-to-video (`img2video_ltx.json`)
+
+The video workflow targets LTX-Video and needs these custom nodes installed in
+ComfyUI, plus the LTX checkpoint:
+
+- [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo) (provides
+  `LTXVImgToVideo`)
+- [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite)
+  (provides `VHS_VideoCombine`, which writes the MP4)
+- checkpoint `ltx-video-2b-v0.9.5.safetensors` in `models/checkpoints/`
+
 ## GPU
 
 The service requires the host to have `nvidia-container-toolkit` installed so

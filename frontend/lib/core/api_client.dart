@@ -113,6 +113,18 @@ class ApiClient {
     return res.data!['jobId'] as String;
   }
 
+  /// Image-to-video: animate a source image into a short clip.
+  Future<String> imageToVideo(
+      String sourceAssetId, String prompt, int durationSeconds) async {
+    final res =
+        await _dio.post<Map<String, dynamic>>('/generate/image-to-video', data: {
+      'sourceAssetId': sourceAssetId,
+      if (prompt.isNotEmpty) 'prompt': prompt,
+      'durationSeconds': durationSeconds,
+    });
+    return res.data!['jobId'] as String;
+  }
+
   // --- Assets --------------------------------------------------------------
 
   /// Uploads image bytes and returns the new asset id.

@@ -21,4 +21,9 @@ public class GenerationController {
     public JobIdResponse generateImage(@Valid @RequestBody GenerateImageRequest request) {
         return new JobIdResponse(generationService.submitImageJob(request));
     }
+
+    @PostMapping("/image-to-video")
+    public JobIdResponse generateImageToVideo(@Valid @RequestBody ImageToVideoRequest request) {
+        return new JobIdResponse(generationService.submitImageToVideoJob(request));
+    }
 }

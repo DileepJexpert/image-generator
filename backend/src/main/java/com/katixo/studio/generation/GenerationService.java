@@ -35,6 +35,12 @@ public class GenerationService {
         return job.getId();
     }
 
+    public UUID submitImageToVideoJob(ImageToVideoRequest request) {
+        Job job = jobService.create(JobType.IMAGE_TO_VIDEO, toJson(request));
+        jobQueue.enqueue(job.getId());
+        return job.getId();
+    }
+
     private String toJson(Object value) {
         try {
             return objectMapper.writeValueAsString(value);

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.katixo.studio.config.KatixoProperties;
+import com.katixo.studio.media.MultipartBody;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
@@ -38,6 +39,8 @@ public class ComfyUiClient {
 
     private static final String WORKFLOW_TEXT2IMG =
             "com/katixo/studio/generation/workflows/text2img_sdxl.json";
+    private static final String WORKFLOW_IMG2VIDEO =
+            "com/katixo/studio/generation/workflows/img2video_ltx.json";
 
     private static final Duration COMPLETION_TIMEOUT = Duration.ofMinutes(10);
     private static final Duration POLL_INTERVAL = Duration.ofMillis(750);
@@ -83,6 +86,58 @@ public class ComfyUiClient {
                 progressSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
             }
         }
+    }
+
+    /**
+     * Run the image-to-video workflow. Uploads the source frame to ComfyUI,
+     * injects it into the LTX template, runs, and returns the encoded clip.
+     */
+    public ComfyVideoResult generateVideo(VideoGenerationParams params, IntConsumer onProgress)
+            throws IOException, InterruptedException {
+
+        String imageName = uploadImage(params.sourceImage(), "katixo_src.png");
+
+        JsonNode graph = buildGraph(WORKFLOW_IMG2VIDEO, Map.of(
+                "{{IMAGE_NAME}}", imageName,
+                "{{PROMPT}}", params.prompt() == null ? "" : params.prompt(),
+                "{{NEGATIVE_PROMPT}}", params.negativePrompt() == null ? "" : params.negativePrompt(),
+                "{{WIDTH}}", params.width(),
+                "{{HEIGHT}}", params.height(),
+                "{{FRAMES}}", params.frames(),
+                "{{FPS}}", params.fps(),
+                "{{SEED}}", params.seed()
+        ));
+
+        String clientId = UUID.randomUUID().toString();
+        WebSocket progressSocket = openProgressSocket(clientId, onProgress);
+        try {
+            String promptId = submitPrompt(graph, clientId);
+            JsonNode outputs = awaitOutputs(promptId);
+            ComfyVideoResult result = fetchFirstVideo(outputs);
+            onProgress.accept(100);
+            return result;
+        } finally {
+            if (progressSocket != null) {
+                progressSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
+            }
+        }
+    }
+
+    /** Uploads an image to ComfyUI's input dir; returns the stored image name. */
+    private String uploadImage(byte[] bytes, String filename) throws IOException, InterruptedException {
+        MultipartBody body = new MultipartBody("image", filename, "image/png", bytes);
+        HttpRequest request = HttpRequest.newBuilder(URI.create(httpBase() + "/upload/image"))
+                .header("Content-Type", body.contentType())
+                .POST(body.publisher())
+                .build();
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() / 100 != 2) {
+            throw new IOException("ComfyUI /upload/image failed (" + response.statusCode() + "): " + response.body());
+        }
+        JsonNode json = objectMapper.readTree(response.body());
+        String name = json.path("name").asText();
+        String subfolder = json.path("subfolder").asText("");
+        return subfolder.isBlank() ? name : subfolder + "/" + name;
     }
 
     // --- template handling ---------------------------------------------------
@@ -194,6 +249,34 @@ public class ComfyUiClient {
             }
         }
         throw new IOException("ComfyUI produced no images");
+    }
+
+    /** Find the produced video: VHS_VideoCombine writes under "gifs"; fall back to "images". */
+    private ComfyVideoResult fetchFirstVideo(JsonNode outputs) throws IOException, InterruptedException {
+        for (JsonNode nodeOutput : outputs) {
+            JsonNode media = nodeOutput.get("gifs");
+            if (media == null || !media.isArray() || media.isEmpty()) {
+                media = nodeOutput.get("images");
+            }
+            if (media != null && media.isArray() && !media.isEmpty()) {
+                JsonNode item = media.get(0);
+                String url = UriComponentsBuilder.fromHttpUrl(httpBase() + "/view")
+                        .queryParam("filename", item.path("filename").asText())
+                        .queryParam("subfolder", item.path("subfolder").asText(""))
+                        .queryParam("type", item.path("type").asText("output"))
+                        .toUriString();
+                HttpRequest request = HttpRequest.newBuilder(URI.create(url)).GET().build();
+                HttpResponse<byte[]> response =
+                        httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                if (response.statusCode() / 100 != 2) {
+                    throw new IOException("ComfyUI /view (video) failed (" + response.statusCode() + ")");
+                }
+                String format = item.path("format").asText("");
+                String mime = format.contains("mp4") || format.isBlank() ? "video/mp4" : format;
+                return new ComfyVideoResult(response.body(), mime);
+            }
+        }
+        throw new IOException("ComfyUI produced no video");
     }
 
     private String httpBase() {

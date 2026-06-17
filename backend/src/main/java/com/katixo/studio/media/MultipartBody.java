@@ -10,13 +10,13 @@ import java.util.UUID;
  * Builds a {@code multipart/form-data} body with a single file part for the
  * JDK {@link java.net.http.HttpClient} (which has no native multipart support).
  */
-final class MultipartBody {
+public final class MultipartBody {
 
     final String boundary = "----katixo" + UUID.randomUUID().toString().replace("-", "");
 
     private final byte[] body;
 
-    MultipartBody(String fieldName, String filename, String contentType, byte[] data) {
+    public MultipartBody(String fieldName, String filename, String contentType, byte[] data) {
         List<byte[]> parts = new ArrayList<>();
         parts.add(("--" + boundary + "\r\n"
                 + "Content-Disposition: form-data; name=\"" + fieldName + "\"; filename=\"" + filename + "\"\r\n"
@@ -35,11 +35,11 @@ final class MultipartBody {
         this.body = assembled;
     }
 
-    String contentType() {
+    public String contentType() {
         return "multipart/form-data; boundary=" + boundary;
     }
 
-    HttpRequest.BodyPublisher publisher() {
+    public HttpRequest.BodyPublisher publisher() {
         return HttpRequest.BodyPublishers.ofByteArray(body);
     }
 }
