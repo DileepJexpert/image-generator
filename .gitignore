@@ -1,0 +1,22 @@
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Backend (Gradle / Java)
+backend/.gradle/
+backend/build/
+backend/bin/
+backend/out/
+
+# Frontend (Flutter)
+frontend/.dart_tool/
+frontend/.flutter-plugins
+frontend/.flutter-plugins-dependencies
+frontend/build/
+frontend/.packages
+
+# Local data / assets
+data/
+*.log

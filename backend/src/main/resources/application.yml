@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: katixo-studio
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/katixo}
+    username: ${DATABASE_USER:katixo}
+    password: ${DATABASE_PASSWORD:katixo}
+  jpa:
+    hibernate:
+      # Schema is owned by Flyway. Never let Hibernate touch DDL.
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+
+# Internal sidecar URLs (used from Milestone 2 onward).
+katixo:
+  comfyui-url: ${COMFYUI_URL:http://localhost:8188}
+  rembg-url: ${REMBG_URL:http://localhost:7000}
+  esrgan-url: ${ESRGAN_URL:http://localhost:7001}
+  asset-storage-path: ${ASSET_STORAGE_PATH:/data/assets}
+
+server:
+  port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

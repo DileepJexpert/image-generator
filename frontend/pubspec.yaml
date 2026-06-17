@@ -1,0 +1,27 @@
+name: katixo_studio
+description: Katixo Studio — local GPU design + media studio (Flutter Web).
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # HTTP + WebSocket (used from later milestones)
+  dio: ^5.7.0
+  web_socket_channel: ^3.0.1
+
+  # Routing
+  go_router: ^14.2.7
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

@@ -1,0 +1,73 @@
+# Katixo Studio — local studio stack.
+#
+# Milestone 1 brings up: postgres, redis, backend (Spring Boot monolith),
+# frontend (Flutter Web shell). The GPU media sidecars (comfyui, rembg,
+# esrgan) are added in Milestone 2 so that `docker compose up` works on
+# machines without an NVIDIA GPU during the skeleton phase.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: katixo
+      POSTGRES_USER: katixo
+      POSTGRES_PASSWORD: katixo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U katixo -d katixo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/katixo
+      DATABASE_USER: katixo
+      DATABASE_PASSWORD: katixo
+      REDIS_URL: redis://redis:6379
+      ASSET_STORAGE_PATH: /data/assets
+      # Sidecar URLs — wired up in Milestone 2.
+      COMFYUI_URL: http://comfyui:8188
+      REMBG_URL: http://rembg:7000
+      ESRGAN_URL: http://esrgan:7001
+    ports:
+      - "8080:8080"
+    volumes:
+      - asset_data:/data/assets
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8081:80"
+
+volumes:
+  postgres_data:
+  asset_data:
