@@ -79,9 +79,9 @@ Use the latest stable of each unless a specific pin is given.
 ```
 katixo-studio/
 ├── CLAUDE.md
-├── docker-compose.yml
 ├── backend/                      # Spring Boot monolith
 │   ├── pom.xml
+│   ├── docker-compose.yml        # whole-stack compose (one-click run from IDE)
 │   └── src/main/java/com/katixo/studio/
 │       ├── StudioApplication.java
 │       ├── config/               # web, ws, redis, cors
@@ -215,7 +215,7 @@ jobs(id uuid pk, type text,              -- image | image_to_video | remove_bg |
 
 ## 10. Local dev & GPU
 
-`docker-compose.yml` services: `postgres`, `redis`, `comfyui` (GPU), `rembg`, `esrgan`, `backend`, `frontend`.
+`backend/docker-compose.yml` services: `postgres`, `redis`, `comfyui` (GPU), `rembg`, `esrgan`, `backend`, `frontend`. (The compose file lives under `backend/` for one-click run from the IDE; its build contexts are relative to that directory.)
 
 * Give ComfyUI the GPU via the `nvidia` runtime / `deploy.resources.reservations.devices`.
 * Mount a persistent volume for ComfyUI `models/` (checkpoints are large).
@@ -224,7 +224,7 @@ jobs(id uuid pk, type text,              -- image | image_to_video | remove_bg |
 
 ## 11. Build milestones (do these in order; stop and confirm after each)
 
-1. **Skeleton.** Monorepo + `docker-compose.yml` (postgres, redis, empty backend with health check, Flutter web shell that loads). Flyway V1 creates the three tables. Acceptance: `docker compose up` runs; `/actuator/health` is UP; Flutter shell renders.
+1. **Skeleton.** Monorepo + `backend/docker-compose.yml` (postgres, redis, empty backend with health check, Flutter web shell that loads). Flyway V1 creates the three tables. Acceptance: `docker compose up` runs; `/actuator/health` is UP; Flutter shell renders.
 2. **Generation spine.** ComfyUI in compose; `text2img_sdxl.json` template; `POST /generate/image` → job → ComfyUI → asset stored → job `done`; WS emits progress. Acceptance: a curl call produces a saved PNG and a completed job.
 3. **Editor core.** Scene model (freezed), CustomPainter render, add text + upload image, move/resize/rotate, save/load project, export PNG. Acceptance: build a 2-element design, reload it, export it.
 4. **Generate-into-canvas.** Image panel wired end-to-end; generated image lands on the canvas as an `ImageElement`. Acceptance: type prompt → image appears on canvas.
