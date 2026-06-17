@@ -1,0 +1,123 @@
+# Katixo Studio — local studio stack.
+#
+# Services: postgres, redis, comfyui (GPU), rembg (CPU), esrgan (GPU),
+# backend (Spring Boot monolith), frontend (Flutter Web).
+#
+# comfyui + esrgan require the host to have nvidia-container-toolkit. On a
+# machine without an NVIDIA GPU, bring up the always-runnable subset:
+#   docker compose up postgres redis rembg backend frontend
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: katixo
+      POSTGRES_USER: katixo
+      POSTGRES_PASSWORD: katixo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U katixo -d katixo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  comfyui:
+    build:
+      context: ./media/comfyui
+    ports:
+      - "8188:8188"
+    volumes:
+      # Persist large checkpoints across rebuilds (see media/comfyui/README.md).
+      - comfyui_models:/opt/ComfyUI/models
+      - comfyui_output:/opt/ComfyUI/output
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
+
+  rembg:
+    build:
+      context: ./media/rembg
+    ports:
+      - "7000:7000"
+    volumes:
+      # Persist the downloaded u2net model across restarts.
+      - rembg_models:/root/.u2net
+
+  esrgan:
+    build:
+      context: ./media/esrgan
+    ports:
+      - "7001:7001"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
+
+  backend:
+    build:
+      context: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      comfyui:
+        condition: service_started
+      rembg:
+        condition: service_started
+      esrgan:
+        condition: service_started
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/katixo
+      DATABASE_USER: katixo
+      DATABASE_PASSWORD: katixo
+      REDIS_URL: redis://redis:6379
+      ASSET_STORAGE_PATH: /data/assets
+      # Sidecar URLs — wired up in Milestone 2.
+      COMFYUI_URL: http://comfyui:8188
+      REMBG_URL: http://rembg:7000
+      ESRGAN_URL: http://esrgan:7001
+    ports:
+      - "8080:8080"
+    volumes:
+      - asset_data:/data/assets
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8081:80"
+
+volumes:
+  postgres_data:
+  asset_data:
+  comfyui_models:
+  comfyui_output:
+  rembg_models:

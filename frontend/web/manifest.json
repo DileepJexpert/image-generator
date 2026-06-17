@@ -1,0 +1,11 @@
+{
+  "name": "Katixo Studio",
+  "short_name": "Katixo",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#1c1b22",
+  "theme_color": "#6C5CE7",
+  "description": "Local GPU design + media studio.",
+  "orientation": "landscape-primary",
+  "prefer_related_applications": false
+}

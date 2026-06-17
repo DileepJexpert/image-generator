@@ -1,0 +1,42 @@
+name: katixo_studio
+description: Katixo Studio — local GPU design + media studio (Flutter Web).
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # Immutable models + JSON (the scene save format)
+  freezed_annotation: ^2.4.4
+  json_annotation: ^4.9.0
+
+  # HTTP + WebSocket
+  dio: ^5.7.0
+  web_socket_channel: ^3.0.1
+
+  # Routing
+  go_router: ^14.2.7
+
+  # File picking (image upload) — works on Flutter Web
+  file_picker: ^8.1.2
+
+  # PDF export (place rendered page images into a document)
+  pdf: ^3.11.1
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+  # Code generation for freezed models
+  build_runner: ^2.4.13
+  freezed: ^2.5.7
+  json_serializable: ^6.8.0
+
+flutter:
+  uses-material-design: true
