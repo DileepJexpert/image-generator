@@ -40,6 +40,15 @@ dependencies {
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
+// ComfyUI workflow graphs live next to the generation feature code
+// (src/main/java/.../generation/workflows/*.json per CLAUDE.md). Copy them
+// onto the classpath so ComfyUiClient can load them as resources.
+tasks.named<ProcessResources>("processResources") {
+    from("src/main/java") {
+        include("**/workflows/*.json")
+    }
+}
+
 tasks.withType<Test> {
     useJUnitPlatform()
 }

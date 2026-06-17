@@ -1,9 +1,11 @@
 # Katixo Studio — local studio stack.
 #
-# Milestone 1 brings up: postgres, redis, backend (Spring Boot monolith),
-# frontend (Flutter Web shell). The GPU media sidecars (comfyui, rembg,
-# esrgan) are added in Milestone 2 so that `docker compose up` works on
-# machines without an NVIDIA GPU during the skeleton phase.
+# Services: postgres, redis, comfyui (GPU), backend (Spring Boot monolith),
+# frontend (Flutter Web). The rembg/esrgan sidecars arrive in later milestones.
+#
+# comfyui requires the host to have nvidia-container-toolkit. On a machine
+# without an NVIDIA GPU, bring up everything except it:
+#   docker compose up postgres redis backend frontend
 
 services:
   postgres:
@@ -32,6 +34,23 @@ services:
       timeout: 5s
       retries: 10
 
+  comfyui:
+    build:
+      context: ./media/comfyui
+    ports:
+      - "8188:8188"
+    volumes:
+      # Persist large checkpoints across rebuilds (see media/comfyui/README.md).
+      - comfyui_models:/opt/ComfyUI/models
+      - comfyui_output:/opt/ComfyUI/output
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
+
   backend:
     build:
       context: ./backend
@@ -40,6 +59,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      comfyui:
+        condition: service_started
     environment:
       DATABASE_URL: jdbc:postgresql://postgres:5432/katixo
       DATABASE_USER: katixo
@@ -71,3 +92,5 @@ services:
 volumes:
   postgres_data:
   asset_data:
+  comfyui_models:
+  comfyui_output:
