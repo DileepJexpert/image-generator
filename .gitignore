@@ -17,11 +17,11 @@ frontend/.flutter-plugins
 frontend/.flutter-plugins-dependencies
 frontend/build/
 frontend/.packages
-frontend/pubspec.lock
 
-# Generated sources (recreated by build_runner; the Docker build regenerates them)
-frontend/**/*.freezed.dart
-frontend/**/*.g.dart
+# NOTE: freezed/json_serializable generated sources (*.freezed.dart, *.g.dart)
+# are intentionally committed (see frontend/lib/editor/model/). They depend only
+# on the stable freezed_annotation runtime, so a fresh clone compiles without
+# running build_runner — regenerate them after changing a model.
 
 # Local data / assets
 data/

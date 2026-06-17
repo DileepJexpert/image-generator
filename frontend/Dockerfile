@@ -2,10 +2,13 @@
 # Build the Flutter Web bundle.
 FROM ghcr.io/cirruslabs/flutter:stable AS build
 WORKDIR /app
-COPY pubspec.yaml ./
+# Copy the lockfile too so dependency versions are pinned and reproducible
+# (prevents transitive analyzer/source_gen drift from breaking codegen).
+COPY pubspec.yaml pubspec.lock ./
 RUN flutter pub get
 COPY . .
-# Generate freezed / json_serializable sources, then build the web bundle.
+# Generated freezed / json_serializable sources are committed; refresh them so
+# the bundle always matches the current models, then build the web bundle.
 RUN dart run build_runner build --delete-conflicting-outputs
 RUN flutter build web --release
 

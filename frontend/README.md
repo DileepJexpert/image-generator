@@ -5,16 +5,23 @@ The design editor + AI panels. Talks only to our internal backend API
 
 ## Code generation
 
-The scene model uses **freezed + json_serializable**, so generated sources
-(`*.freezed.dart`, `*.g.dart`) must be created before running/building. They are
-gitignored; regenerate with:
+The scene model uses **freezed + json_serializable**. The generated sources
+(`lib/editor/model/*.freezed.dart`, `*.g.dart`) are **committed to the repo**, so
+a fresh clone compiles and runs without any code-gen step — they depend only on
+the stable `freezed_annotation` runtime. `pubspec.lock` is committed as well to
+pin dependency versions (a too-new transitive `analyzer` can silently break the
+freezed 2.x generator).
+
+You only need to regenerate after **changing a model** (`design_element.dart`,
+`project.dart`, `scene_page.dart`):
 
 ```bash
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-The Docker build does this automatically.
+Then commit the regenerated `*.freezed.dart` / `*.g.dart` alongside the model
+change. The Docker build also runs this step.
 
 ## Run (dev)
 
@@ -47,9 +54,14 @@ production, nginx proxies `/api` and `/ws` to the backend monolith (see
 
 * **Errors about missing union types (`ImageElement`/`ShapeElement`/
   `VideoElement`), a missing `elements` getter, or `_$...FromJson`/`...ToJson`
-  not found** mean the generated files are absent or stale. Run the
-  `build_runner build --delete-conflicting-outputs` step above. These files are
-  gitignored, so a fresh clone always needs this once.
+  not found** mean the generated `*.freezed.dart` / `*.g.dart` files are missing
+  or stale. They are committed, so a fresh clone should already have them; if you
+  deleted them or `build_runner` left them empty, restore with
+  `git checkout -- lib/editor/model` or regenerate via the step above.
+* **`build_runner` produces empty files / silently generates nothing** is usually
+  a too-new transitive `analyzer` against the freezed 2.x generator. Use the
+  committed `pubspec.lock` (`flutter pub get` without upgrading) so versions stay
+  pinned; avoid `flutter pub upgrade` unless you also bump freezed.
 
 ## Build (web release)
 
