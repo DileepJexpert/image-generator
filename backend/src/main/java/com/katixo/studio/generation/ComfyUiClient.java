@@ -38,7 +38,7 @@ public class ComfyUiClient {
     private static final Logger log = LoggerFactory.getLogger(ComfyUiClient.class);
 
     private static final String WORKFLOW_TEXT2IMG =
-            "com/katixo/studio/generation/workflows/text2img_sdxl.json";
+            "com/katixo/studio/generation/workflows/text2img.json";
     private static final String WORKFLOW_IMG2VIDEO =
             "com/katixo/studio/generation/workflows/img2video_ltx.json";
 

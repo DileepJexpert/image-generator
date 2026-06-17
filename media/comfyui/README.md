@@ -11,14 +11,26 @@ a host **bind mount**: `media/comfyui/models/` on the host maps to
 Generated files land in `media/comfyui/output/`. Both folders are kept in git
 via `.gitkeep`, but their contents are gitignored.
 
-For the `text2img_sdxl.json` workflow, download an SDXL checkpoint into
-`media/comfyui/models/checkpoints/`. The default the backend asks for is
-`sd_xl_base_1.0.safetensors` — get it from Hugging Face
-`stabilityai/stable-diffusion-xl-base-1.0` (~6.5 GB) and place it at:
+Download a checkpoint into `media/comfyui/models/checkpoints/`. The
+`text2img.json` workflow is model-agnostic (standard SD nodes), so it works with
+either SD 1.5 or SDXL — pick based on your GPU.
+
+**Default — SD 1.5** (light, fast, comfortable on an 8GB card). The backend asks
+for `v1-5-pruned-emaonly.safetensors` (~4 GB):
 
 ```
-media/comfyui/models/checkpoints/sd_xl_base_1.0.safetensors
+media/comfyui/models/checkpoints/v1-5-pruned-emaonly.safetensors
 ```
+
+Download it from Hugging Face
+`stable-diffusion-v1-5/stable-diffusion-v1-5`
+(`v1-5-pruned-emaonly.safetensors`). SD 1.5 is native at 512px — use the 512²
+presets in the image panel.
+
+**Optional — SDXL** (higher quality, needs ~12GB for comfort). Place
+`sd_xl_base_1.0.safetensors` (~6.5 GB, from
+`stabilityai/stable-diffusion-xl-base-1.0`) in the same folder and select
+"SDXL Base" in the panel (or pass `model` in the request).
 
 Override the checkpoint per request with the `model` field of
 `POST /api/v1/generate/image`.
