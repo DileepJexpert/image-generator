@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api_client.dart';
 import '../core/download/download.dart';
 import '../core/id.dart';
+import '../generation/image_panel.dart';
 import 'canvas/editor_canvas.dart';
 import 'export/png_exporter.dart';
 import 'model/design_element.dart';
@@ -28,6 +29,7 @@ class EditorPage extends ConsumerStatefulWidget {
 class _EditorPageState extends ConsumerState<EditorPage> {
   final GlobalKey _exportKey = GlobalKey();
   bool _loading = true;
+  bool _showAiPanel = true;
   String? _error;
 
   @override
@@ -165,6 +167,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         title: Text(editor.project?.name ?? 'Editor'),
         actions: [
           IconButton(
+            tooltip: 'AI image panel',
+            isSelected: _showAiPanel,
+            onPressed: () => setState(() => _showAiPanel = !_showAiPanel),
+            icon: const Icon(Icons.auto_awesome_outlined),
+            selectedIcon: const Icon(Icons.auto_awesome),
+          ),
+          IconButton(
             tooltip: 'Export PNG',
             onPressed: editor.hasProject ? _exportPng : null,
             icon: const Icon(Icons.download_outlined),
@@ -190,6 +199,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                       onAddShape: _addShape,
                       onUploadImage: _uploadImage,
                     ),
+                    if (_showAiPanel) const ImagePanel(),
                     Expanded(child: EditorCanvas(exportKey: _exportKey)),
                     const InspectorPanel(),
                   ],

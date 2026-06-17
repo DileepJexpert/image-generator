@@ -9,6 +9,11 @@ import '../editor/model/project.dart';
 /// backend (CLAUDE.md prime directive #3); nginx proxies /api to the monolith.
 const String kApiBase = '/api/v1';
 
+/// Optional absolute backend origin for local dev (e.g. when running
+/// `flutter run` against a backend on another port). Set with
+/// `--dart-define=API_ORIGIN=http://localhost:8080`. Empty = same origin.
+const String kApiOrigin = String.fromEnvironment('API_ORIGIN');
+
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
 /// Thin wrapper over the internal REST API (projects + assets + generation).
@@ -16,7 +21,7 @@ class ApiClient {
   ApiClient({Dio? dio})
       : _dio = dio ??
             Dio(BaseOptions(
-              baseUrl: kApiBase,
+              baseUrl: '$kApiOrigin$kApiBase',
               connectTimeout: const Duration(seconds: 15),
               receiveTimeout: const Duration(seconds: 60),
             ));
@@ -69,6 +74,29 @@ class ApiClient {
 
   Future<void> deleteProject(String id) async {
     await _dio.delete('/projects/$id');
+  }
+
+  // --- Generation ----------------------------------------------------------
+
+  /// Submits an image generation job; returns the async job id (CLAUDE.md §6).
+  Future<String> generateImage({
+    required String prompt,
+    String? negativePrompt,
+    required int width,
+    required int height,
+    required String model,
+    int? seed,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>('/generate/image', data: {
+      'prompt': prompt,
+      if (negativePrompt != null && negativePrompt.isNotEmpty)
+        'negativePrompt': negativePrompt,
+      'width': width,
+      'height': height,
+      'model': model,
+      if (seed != null) 'seed': seed,
+    });
+    return res.data!['jobId'] as String;
   }
 
   // --- Assets --------------------------------------------------------------
