@@ -18,5 +18,6 @@ WORKDIR /opt/ComfyUI
 EXPOSE 8188
 
 # Models are bind-mounted at runtime (see docker-compose.yml) so the large
-# checkpoints are not baked into the image.
-CMD ["python", "main.py", "--listen", "0.0.0.0", "--port", "8188"]
+# checkpoints are not baked into the image. COMFY_ARGS injects launch flags
+# (e.g. --lowvram for 8GB cards); shell form so the variable is expanded.
+CMD ["sh", "-c", "python main.py --listen 0.0.0.0 --port 8188 ${COMFY_ARGS}"]

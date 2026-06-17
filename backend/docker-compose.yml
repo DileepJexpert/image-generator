@@ -43,10 +43,16 @@ services:
       context: ../media/comfyui
     ports:
       - "8188:8188"
+    environment:
+      # ComfyUI launch flags. --lowvram keeps SDXL within an 8GB card (RTX 4060)
+      # by offloading aggressively; drop it for more speed on bigger GPUs.
+      COMFY_ARGS: "--lowvram"
     volumes:
-      # Persist large checkpoints across rebuilds (see media/comfyui/README.md).
-      - comfyui_models:/opt/ComfyUI/models
-      - comfyui_output:/opt/ComfyUI/output
+      # Host bind mounts so you can drop checkpoints in a visible folder and see
+      # outputs (see media/comfyui/README.md). Paths are relative to this file
+      # (backend/), i.e. the repo's media/comfyui/ directory.
+      - ../media/comfyui/models:/opt/ComfyUI/models
+      - ../media/comfyui/output:/opt/ComfyUI/output
     deploy:
       resources:
         reservations:
@@ -122,6 +128,4 @@ services:
 volumes:
   postgres_data:
   asset_data:
-  comfyui_models:
-  comfyui_output:
   rembg_models:
