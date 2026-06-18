@@ -4,6 +4,14 @@ Self-hosted, GPU-powered design + media studio (a personal "Canva") for a single
 
 Rename `katixo-studio` freely; it is used only as the repo/module name below.
 
+> **Scope note.** This file specifies the **Phase-1 creative core** (image + short
+> video design studio). The product is expanding into a broader local AI studio
+> (image, video, audio/voice, text/LLM, plus analytic tools and a Copilot agent) —
+> see [`VISION.md`](./VISION.md) for that direction and the phased roadmap. The
+> architecture backbone here (single monolith orchestrator + installed sidecars +
+> async jobs + Flutter) is unchanged by the expansion; new capabilities are added
+> as more sidecars, job types, Flyway migrations, and UI panels.
+
 ## 1. Prime directives (read before writing any code)
 
 1. **Single Spring Boot monolith.** One backend application, package-by-feature. No microservices, no service mesh, no event-bus-between-services. The Python media tools (ComfyUI, rembg, Real-ESRGAN) are infrastructure sidecars, not "our services" — we only call them over HTTP.
