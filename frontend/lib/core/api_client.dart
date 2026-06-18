@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../editor/model/project.dart';
@@ -9,10 +10,21 @@ import '../editor/model/project.dart';
 /// backend (CLAUDE.md prime directive #3); nginx proxies /api to the monolith.
 const String kApiBase = '/api/v1';
 
-/// Optional absolute backend origin for local dev (e.g. when running
-/// `flutter run` against a backend on another port). Set with
-/// `--dart-define=API_ORIGIN=http://localhost:8080`. Empty = same origin.
-const String kApiOrigin = String.fromEnvironment('API_ORIGIN');
+/// Explicit backend origin from `--dart-define=API_ORIGIN=http://host:port`.
+const String _apiOriginDefine = String.fromEnvironment('API_ORIGIN');
+
+/// Absolute backend origin, or empty for same-origin.
+///
+/// Resolution order:
+/// 1. An explicit `--dart-define=API_ORIGIN` always wins.
+/// 2. In debug (`flutter run`) default to the local backend on :8080, so dev
+///    "just works" without remembering the define.
+/// 3. Otherwise empty = same origin (production: nginx proxies /api + /ws).
+String get kApiOrigin {
+  if (_apiOriginDefine.isNotEmpty) return _apiOriginDefine;
+  if (kDebugMode) return 'http://localhost:8080';
+  return '';
+}
 
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
@@ -144,7 +156,7 @@ class ApiClient {
   }
 
   /// URL that streams an asset's bytes (used by the image cache + <img>).
-  String assetUrl(String assetId) => '$kApiBase/assets/$assetId';
+  String assetUrl(String assetId) => '$kApiOrigin$kApiBase/assets/$assetId';
 
   /// Fetches raw asset bytes (for decoding into the canvas image cache).
   Future<Uint8List> fetchAssetBytes(String assetId) async {

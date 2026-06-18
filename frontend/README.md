@@ -46,9 +46,18 @@ dart run build_runner watch --delete-conflicting-outputs
 flutter run -d chrome
 ```
 
-By default the app calls the API at the same origin under `/api/v1`. In
-production, nginx proxies `/api` and `/ws` to the backend monolith (see
-`nginx.conf`); for `docker compose up` everything is wired automatically.
+### Backend origin
+
+The app resolves the backend origin automatically:
+
+* **`flutter run` (debug)** → defaults to `http://localhost:8080`, so a locally
+  run Spring Boot backend just works — no flag needed.
+* **Override** with `--dart-define=API_ORIGIN=http://host:port` (e.g. a backend
+  on another machine/port).
+* **Release build** (`docker compose up`, served by nginx) → same origin; nginx
+  proxies `/api` and `/ws` to the monolith. See `nginx.conf`.
+
+So for local dev you only need the backend up on :8080 and `flutter run -d chrome`.
 
 ### Troubleshooting
 
@@ -62,6 +71,12 @@ production, nginx proxies `/api` and `/ws` to the backend monolith (see
   a too-new transitive `analyzer` against the freezed 2.x generator. Use the
   committed `pubspec.lock` (`flutter pub get` without upgrading) so versions stay
   pinned; avoid `flutter pub upgrade` unless you also bump freezed.
+* **"Failed to load projects" with `type 'String' is not a subtype of type
+  List<dynamic>`** means the API call got HTML (an `index.html`) instead of JSON —
+  i.e. the request hit the Flutter dev server, not the backend. In debug the app
+  now targets `http://localhost:8080` automatically, so this means the **backend
+  isn't running** (or isn't on :8080). Start it and check
+  `http://localhost:8080/actuator/health` is `UP`.
 
 ## Build (web release)
 
