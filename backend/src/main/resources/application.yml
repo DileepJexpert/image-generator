@@ -29,7 +29,9 @@ katixo:
   asset-storage-path: ${ASSET_STORAGE_PATH:/data/assets}
 
 server:
-  port: 8080
+  # Unique port to avoid clashing with other local Spring Boot apps (8080).
+  # Override with SERVER_PORT if needed.
+  port: ${SERVER_PORT:8585}
 
 management:
   endpoints:
