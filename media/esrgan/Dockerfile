@@ -13,6 +13,12 @@ RUN pip install --no-cache-dir \
     python-multipart==0.0.9 \
     pillow numpy
 
+# basicsr 1.4.2 imports `torchvision.transforms.functional_tensor`, which was
+# removed in torchvision >= 0.17 (this base ships 0.19), so Real-ESRGAN fails to
+# import. Patch the import to its current location (rgb_to_grayscale still lives
+# in torchvision.transforms.functional).
+RUN python -c "import os,basicsr;p=os.path.join(os.path.dirname(basicsr.__file__),'data','degradations.py');s=open(p).read().replace('torchvision.transforms.functional_tensor','torchvision.transforms.functional');open(p,'w').write(s)"
+
 WORKDIR /app
 COPY app.py .
 
