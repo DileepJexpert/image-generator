@@ -50,14 +50,14 @@ flutter run -d chrome
 
 The app resolves the backend origin automatically:
 
-* **`flutter run` (debug)** → defaults to `http://localhost:8080`, so a locally
+* **`flutter run` (debug)** → defaults to `http://localhost:8585`, so a locally
   run Spring Boot backend just works — no flag needed.
 * **Override** with `--dart-define=API_ORIGIN=http://host:port` (e.g. a backend
   on another machine/port).
 * **Release build** (`docker compose up`, served by nginx) → same origin; nginx
   proxies `/api` and `/ws` to the monolith. See `nginx.conf`.
 
-So for local dev you only need the backend up on :8080 and `flutter run -d chrome`.
+So for local dev you only need the backend up on :8585 and `flutter run -d chrome`.
 
 ### Troubleshooting
 
@@ -74,9 +74,9 @@ So for local dev you only need the backend up on :8080 and `flutter run -d chrom
 * **"Failed to load projects" with `type 'String' is not a subtype of type
   List<dynamic>`** means the API call got HTML (an `index.html`) instead of JSON —
   i.e. the request hit the Flutter dev server, not the backend. In debug the app
-  now targets `http://localhost:8080` automatically, so this means the **backend
-  isn't running** (or isn't on :8080). Start it and check
-  `http://localhost:8080/actuator/health` is `UP`.
+  now targets `http://localhost:8585` automatically, so this means the **backend
+  isn't running** (or isn't on :8585). Start it and check
+  `http://localhost:8585/actuator/health` is `UP`.
 
 ## Build (web release)
 

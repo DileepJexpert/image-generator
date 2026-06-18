@@ -108,11 +108,11 @@ services:
       REMBG_URL: http://rembg:7000
       ESRGAN_URL: http://esrgan:7001
     ports:
-      - "8080:8080"
+      - "8585:8585"
     volumes:
       - asset_data:/data/assets
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8585/actuator/health"]
       interval: 10s
       timeout: 5s
       retries: 12

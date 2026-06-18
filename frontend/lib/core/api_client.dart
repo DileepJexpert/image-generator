@@ -17,12 +17,12 @@ const String _apiOriginDefine = String.fromEnvironment('API_ORIGIN');
 ///
 /// Resolution order:
 /// 1. An explicit `--dart-define=API_ORIGIN` always wins.
-/// 2. In debug (`flutter run`) default to the local backend on :8080, so dev
+/// 2. In debug (`flutter run`) default to the local backend on :8585, so dev
 ///    "just works" without remembering the define.
 /// 3. Otherwise empty = same origin (production: nginx proxies /api + /ws).
 String get kApiOrigin {
   if (_apiOriginDefine.isNotEmpty) return _apiOriginDefine;
-  if (kDebugMode) return 'http://localhost:8080';
+  if (kDebugMode) return 'http://localhost:8585';
   return '';
 }
 
