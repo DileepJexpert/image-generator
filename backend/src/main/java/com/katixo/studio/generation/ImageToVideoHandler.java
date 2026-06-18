@@ -19,7 +19,9 @@ import java.security.SecureRandom;
 public class ImageToVideoHandler implements JobHandler {
 
     private static final int FPS = 24;
-    private static final int MAX_DIMENSION = 768;
+    // LTX-Video is VRAM-hungry per frame; cap resolution so short clips fit an
+    // 8GB GPU (RTX 4060). Raise this on a bigger card for higher-res output.
+    private static final int MAX_DIMENSION = 512;
 
     private final ComfyUiClient comfyUiClient;
     private final AssetService assetService;

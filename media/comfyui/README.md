@@ -37,14 +37,28 @@ Override the checkpoint per request with the `model` field of
 
 ### Image-to-video (`img2video_ltx.json`)
 
-The video workflow targets LTX-Video and needs these custom nodes installed in
-ComfyUI, plus the LTX checkpoint:
+The video workflow targets **LTX-Video**. The required custom nodes are now baked
+into this image (see `Dockerfile`):
 
-- [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo) (provides
-  `LTXVImgToVideo`)
+- [ComfyUI-LTXVideo](https://github.com/Lightricks/ComfyUI-LTXVideo) — LTXV nodes
 - [ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite)
-  (provides `VHS_VideoCombine`, which writes the MP4)
-- checkpoint `ltx-video-2b-v0.9.5.safetensors` in `models/checkpoints/`
+  — `VHS_VideoCombine` (writes the MP4; needs `ffmpeg`, also in the image)
+
+You still download the checkpoint into `models/checkpoints/`:
+
+```
+media/comfyui/models/checkpoints/ltx-video-2b-v0.9.5.safetensors
+```
+
+Get it from Hugging Face `Lightricks/LTX-Video`
+(`ltx-video-2b-v0.9.5.safetensors`, ~4 GB). This all-in-one checkpoint bundles
+the text encoder + VAE, so no separate T5 download is needed.
+
+**8GB note (laptop RTX 4060):** video is the heaviest workload here. The backend
+caps resolution at 512px (`ImageToVideoHandler.MAX_DIMENSION`) and ComfyUI runs
+`--lowvram`. Keep clips short (≈2s) and expect minutes per render; longer/larger
+clips will OOM. This path is **experimental on 8GB** — if a node errors, it's
+usually a ComfyUI/LTXV version drift we tune in the workflow JSON.
 
 ## GPU & VRAM
 
