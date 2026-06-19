@@ -144,6 +144,18 @@ class ApiClient {
     return res.data!['jobId'] as String;
   }
 
+  // --- Audio (text-to-speech voiceover) ------------------------------------
+
+  /// Submits a text-to-speech job; returns the async job id. The result is an
+  /// `audio` asset (WAV).
+  Future<String> generateSpeech(String text, {String? voice}) async {
+    final res = await _dio.post<Map<String, dynamic>>('/generate/speech', data: {
+      'text': text,
+      if (voice != null && voice.isNotEmpty) 'voice': voice,
+    });
+    return res.data!['jobId'] as String;
+  }
+
   // --- Copilot (local LLM chat) --------------------------------------------
 
   /// Sends the conversation so far to the Copilot and returns the assistant's

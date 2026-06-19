@@ -5,7 +5,8 @@ public enum JobType {
     IMAGE("image"),
     IMAGE_TO_VIDEO("image_to_video"),
     REMOVE_BG("remove_bg"),
-    UPSCALE("upscale");
+    UPSCALE("upscale"),
+    TEXT_TO_SPEECH("text_to_speech");
 
     private final String value;
 

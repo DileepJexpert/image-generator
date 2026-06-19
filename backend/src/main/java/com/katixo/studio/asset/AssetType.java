@@ -3,7 +3,8 @@ package com.katixo.studio.asset;
 /** Media kind of a stored asset. Stored as lowercase text. */
 public enum AssetType {
     IMAGE("image"),
-    VIDEO("video");
+    VIDEO("video"),
+    AUDIO("audio");
 
     private final String value;
 
