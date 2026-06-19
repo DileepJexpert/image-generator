@@ -252,6 +252,28 @@ class ApiClient {
         .toList();
   }
 
+  // --- Leads ---------------------------------------------------------------
+
+  /// Starts a lead-generation scrape over the given site domains/URLs and
+  /// returns the job id. The result is a `text` asset holding the leads JSON.
+  Future<String> scrapeLeads(
+    List<String> targets, {
+    String? offering,
+    int? maxPagesPerSite,
+    int? maxLeads,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/leads/scrape',
+      data: {
+        'targets': targets,
+        if (offering != null && offering.isNotEmpty) 'offering': offering,
+        if (maxPagesPerSite != null) 'maxPagesPerSite': maxPagesPerSite,
+        if (maxLeads != null) 'maxLeads': maxLeads,
+      },
+    );
+    return res.data!['jobId'] as String;
+  }
+
   // --- Assets --------------------------------------------------------------
 
   /// Uploads image bytes and returns the new asset id.

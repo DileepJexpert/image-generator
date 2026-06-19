@@ -148,6 +148,12 @@ implementation time. VRAM tiers are rough guidance.
 - **Phase 5 — Pipelines & automation.** One-click templates (reel/photoshoot/
   explainer) built as Copilot-driven multi-job pipelines; analytic tools
   (image understanding, document Q&A).
+- **Lead generation (analytic tool).** *In:* a `lead_scrape` job that crawls
+  public site(s) the operator points it at (honoring robots.txt, polite, capped),
+  extracts contact leads, and drafts per-lead outreach via the Copilot LLM;
+  result stored as a `text` asset and shown in a Leads panel with CSV export
+  (`POST /api/v1/leads/scrape`). *Next:* niche → site discovery, and dropping a
+  chosen lead's outreach onto the canvas.
 
 Each phase adds sidecars + Flyway migrations + job types + UI panels behind the same
 orchestrator. No phase requires a rewrite.

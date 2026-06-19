@@ -7,7 +7,8 @@ public enum JobType {
     REMOVE_BG("remove_bg"),
     UPSCALE("upscale"),
     TEXT_TO_SPEECH("text_to_speech"),
-    TRANSCRIBE("transcribe");
+    TRANSCRIBE("transcribe"),
+    LEAD_SCRAPE("lead_scrape");
 
     private final String value;
 

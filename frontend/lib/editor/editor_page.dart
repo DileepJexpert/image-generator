@@ -11,6 +11,7 @@ import '../core/id.dart';
 import '../generation/audio_panel.dart';
 import '../generation/copilot_panel.dart';
 import '../generation/image_panel.dart';
+import '../generation/leads_panel.dart';
 import 'canvas/editor_canvas.dart';
 import 'canvas/image_cache.dart';
 import 'export/pdf_exporter.dart';
@@ -37,6 +38,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
   bool _showAiPanel = true;
   bool _showCopilot = false;
   bool _showAudio = false;
+  bool _showLeads = false;
   String? _error;
 
   @override
@@ -228,6 +230,13 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             icon: const Icon(Icons.smart_toy_outlined),
             selectedIcon: const Icon(Icons.smart_toy),
           ),
+          IconButton(
+            tooltip: 'Leads',
+            isSelected: _showLeads,
+            onPressed: () => setState(() => _showLeads = !_showLeads),
+            icon: const Icon(Icons.travel_explore_outlined),
+            selectedIcon: const Icon(Icons.travel_explore),
+          ),
           PopupMenuButton<String>(
             tooltip: 'Export',
             icon: const Icon(Icons.download_outlined),
@@ -265,6 +274,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                           if (_showAiPanel) const ImagePanel(),
                           if (_showAudio) const AudioPanel(),
                           if (_showCopilot) const CopilotPanel(),
+                          if (_showLeads) const LeadsPanel(),
                           const Expanded(child: EditorCanvas()),
                           const InspectorPanel(),
                         ],
