@@ -11,6 +11,8 @@ public record KatixoProperties(
         String comfyuiUrl,
         String rembgUrl,
         String esrganUrl,
+        String ollamaUrl,
+        String copilotModel,
         String assetStoragePath
 ) {
 }

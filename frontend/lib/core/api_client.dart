@@ -144,6 +144,36 @@ class ApiClient {
     return res.data!['jobId'] as String;
   }
 
+  // --- Copilot (local LLM chat) --------------------------------------------
+
+  /// Sends the conversation so far to the Copilot and returns the assistant's
+  /// reply. The backend is stateless, so [messages] carries the full history as
+  /// `{role, content}` maps (roles: `user` / `assistant`).
+  Future<String> copilotChat(
+    List<Map<String, String>> messages, {
+    String? model,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/copilot/chat',
+      data: {
+        'messages': messages,
+        if (model != null && model.isNotEmpty) 'model': model,
+      },
+      // Local LLMs on CPU can take a while; override the default receive timeout.
+      options: Options(receiveTimeout: const Duration(minutes: 5)),
+    );
+    final message = res.data!['message'] as Map<String, dynamic>;
+    return message['content'] as String;
+  }
+
+  /// Lists models available in the local Ollama instance (names only).
+  Future<List<String>> copilotModels() async {
+    final res = await _dio.get<List<dynamic>>('/copilot/models');
+    return (res.data ?? [])
+        .map((e) => (e as Map<String, dynamic>)['name'] as String)
+        .toList();
+  }
+
   // --- Assets --------------------------------------------------------------
 
   /// Uploads image bytes and returns the new asset id.
