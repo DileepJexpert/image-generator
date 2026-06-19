@@ -4,7 +4,8 @@ package com.katixo.studio.asset;
 public enum AssetType {
     IMAGE("image"),
     VIDEO("video"),
-    AUDIO("audio");
+    AUDIO("audio"),
+    TEXT("text");
 
     private final String value;
 

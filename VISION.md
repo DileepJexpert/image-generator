@@ -132,19 +132,28 @@ implementation time. VRAM tiers are rough guidance.
   image→video (LTX) 🧪, design canvas + export.
 - **Phase 2 — Audio.** Whisper STT sidecar (transcription + word-timed captions) and
   a TTS sidecar (voiceover). New `audio` asset type; timeline gains an audio track.
-  *Started:* Piper TTS sidecar + `POST /api/v1/generate/speech` (async job →
-  `audio` asset) + an in-editor Voiceover panel are in. *Next:* Whisper STT
-  (transcription/captions) and an audio track on the canvas/timeline.
+  *In:* Piper TTS sidecar + `POST /api/v1/generate/speech`; faster-whisper STT
+  sidecar + `POST /api/v1/transcribe` (transcript JSON stored as a `text` asset,
+  downloadable as WebVTT captions). The Voiceover panel both generates speech and
+  transcribes either that voiceover or an uploaded clip.
+  *Next:* an audio track on the canvas/timeline.
 - **Phase 3 — LLM Copilot + RAG.** Ollama sidecar; pgvector on Postgres; prompt
   enhancement, captions, chat, and the agent loop that calls our job APIs.
   *Started:* Ollama sidecar + a stateless Copilot chat API (`/api/v1/copilot/*`)
-  and an in-editor Copilot panel are in. *Next:* token streaming, pgvector RAG,
-  and the tool-driving agent loop.
+  with token streaming (`POST /copilot/chat/stream`, Server-Sent Events) and an
+  in-editor Copilot panel that renders the reply live. *Next:* pgvector RAG and
+  the tool-driving agent loop.
 - **Phase 4 — Advanced creative.** ControlNet, inpaint/outpaint, FLUX, lip-sync,
   music/SFX, face restore, relighting.
 - **Phase 5 — Pipelines & automation.** One-click templates (reel/photoshoot/
   explainer) built as Copilot-driven multi-job pipelines; analytic tools
   (image understanding, document Q&A).
+- **Lead generation (analytic tool).** *In:* a `lead_scrape` job that crawls
+  public site(s) the operator points it at (honoring robots.txt, polite, capped),
+  extracts contact leads, and drafts per-lead outreach via the Copilot LLM;
+  result stored as a `text` asset and shown in a Leads panel with CSV export
+  (`POST /api/v1/leads/scrape`). *Next:* niche → site discovery, and dropping a
+  chosen lead's outreach onto the canvas.
 
 Each phase adds sidecars + Flyway migrations + job types + UI panels behind the same
 orchestrator. No phase requires a rewrite.

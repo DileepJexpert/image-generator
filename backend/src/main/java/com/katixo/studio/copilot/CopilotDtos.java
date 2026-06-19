@@ -28,6 +28,10 @@ public final class CopilotDtos {
     public record ChatResponse(String model, ChatMessage message) {
     }
 
+    /** One streamed content chunk, sent as an SSE {@code data:} JSON event. */
+    public record TokenEvent(String token) {
+    }
+
     /** A model available in the local Ollama instance. */
     public record ModelSummary(String name, long sizeBytes) {
     }

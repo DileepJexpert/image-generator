@@ -1,7 +1,8 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../editor/model/project.dart';
@@ -156,6 +157,14 @@ class ApiClient {
     return res.data!['jobId'] as String;
   }
 
+  /// Submits a transcription job for an existing audio asset; returns the job
+  /// id. The result is a `text` asset holding the transcript JSON.
+  Future<String> transcribe(String assetId) async {
+    final res = await _dio.post<Map<String, dynamic>>('/transcribe',
+        data: {'assetId': assetId});
+    return res.data!['jobId'] as String;
+  }
+
   // --- Copilot (local LLM chat) --------------------------------------------
 
   /// Sends the conversation so far to the Copilot and returns the assistant's
@@ -178,12 +187,91 @@ class ApiClient {
     return message['content'] as String;
   }
 
+  /// Streams the Copilot reply, calling [onToken] with each chunk as it
+  /// arrives, and returns the full reply when done.
+  ///
+  /// On native/desktop this consumes the backend's SSE endpoint incrementally.
+  /// On web, dio can't expose a response body as a stream (XHR), so we fall
+  /// back to the buffered call and deliver the whole reply as one chunk — same
+  /// result, just not progressive.
+  Future<String> copilotChatStream(
+    List<Map<String, String>> messages, {
+    String? model,
+    required void Function(String chunk) onToken,
+  }) async {
+    if (kIsWeb) {
+      final reply = await copilotChat(messages, model: model);
+      onToken(reply);
+      return reply;
+    }
+
+    final res = await _dio.post<ResponseBody>(
+      '/copilot/chat/stream',
+      data: {
+        'messages': messages,
+        if (model != null && model.isNotEmpty) 'model': model,
+      },
+      options: Options(
+        responseType: ResponseType.stream,
+        receiveTimeout: const Duration(minutes: 5),
+        headers: {'Accept': 'text/event-stream'},
+      ),
+    );
+
+    final full = StringBuffer();
+    final lines = res.data!.stream
+        .cast<List<int>>()
+        .transform(utf8.decoder)
+        .transform(const LineSplitter());
+    await for (final line in lines) {
+      if (!line.startsWith('data:')) {
+        continue; // skip SSE `event:` / comment / blank lines
+      }
+      final payload = line.substring(5).trim();
+      if (payload.isEmpty) {
+        continue;
+      }
+      try {
+        final token = (jsonDecode(payload) as Map<String, dynamic>)['token'];
+        if (token is String && token.isNotEmpty) {
+          full.write(token);
+          onToken(token);
+        }
+      } catch (_) {
+        // The terminal `done` event carries `{}` (no token) — ignore.
+      }
+    }
+    return full.toString();
+  }
+
   /// Lists models available in the local Ollama instance (names only).
   Future<List<String>> copilotModels() async {
     final res = await _dio.get<List<dynamic>>('/copilot/models');
     return (res.data ?? [])
         .map((e) => (e as Map<String, dynamic>)['name'] as String)
         .toList();
+  }
+
+  // --- Leads ---------------------------------------------------------------
+
+  /// Starts a lead-generation scrape over the given site domains/URLs and
+  /// returns the job id. The result is a `text` asset holding the leads JSON.
+  Future<String> scrapeLeads(
+    List<String> targets, {
+    String? offering,
+    int? maxPagesPerSite,
+    int? maxLeads,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/leads/scrape',
+      data: {
+        'targets': targets,
+        if (offering != null && offering.isNotEmpty) 'offering': offering,
+        if (maxPagesPerSite != null) 'maxPagesPerSite': maxPagesPerSite,
+        if (maxLeads != null) 'maxLeads': maxLeads,
+      },
+    );
+    return res.data!['jobId'] as String;
   }
 
   // --- Assets --------------------------------------------------------------

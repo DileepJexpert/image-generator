@@ -5,12 +5,12 @@
 # directory (backend is ".", the others are "../media/*" and "../frontend").
 #
 # Services: postgres, redis, comfyui (GPU), rembg (CPU), esrgan (GPU),
-# tts (CPU/Piper), ollama (CPU/Copilot LLM), backend (Spring Boot monolith),
-# frontend (Flutter Web).
+# tts (CPU/Piper), whisper (CPU/faster-whisper), ollama (CPU/Copilot LLM),
+# backend (Spring Boot monolith), frontend (Flutter Web).
 #
 # comfyui + esrgan require the host to have nvidia-container-toolkit. On a
 # machine without an NVIDIA GPU, bring up the always-runnable subset:
-#   docker compose up postgres redis rembg tts ollama backend frontend
+#   docker compose up postgres redis rembg tts whisper ollama backend frontend
 
 services:
   postgres:
@@ -92,6 +92,14 @@ services:
     ports:
       - "7002:7002"
 
+  # faster-whisper speech-to-text sidecar (VISION.md Phase 2). CPU-only — part of
+  # the always-runnable subset. Bakes the `base` model into the image.
+  whisper:
+    build:
+      context: ../media/whisper
+    ports:
+      - "7003:7003"
+
   # Local LLM for the Copilot (VISION.md Phase 3). Runs CPU-only by default so
   # it's part of the always-runnable subset (works on a laptop without an NVIDIA
   # GPU). For GPU acceleration on the workstation, add a deploy.resources.
@@ -122,6 +130,8 @@ services:
         condition: service_started
       tts:
         condition: service_started
+      whisper:
+        condition: service_started
       ollama:
         condition: service_started
     environment:
@@ -135,6 +145,7 @@ services:
       REMBG_URL: http://rembg:7000
       ESRGAN_URL: http://esrgan:7001
       TTS_URL: http://tts:7002
+      WHISPER_URL: http://whisper:7003
       # Copilot LLM (VISION.md Phase 3).
       OLLAMA_URL: http://ollama:11434
       COPILOT_MODEL: llama3.2
