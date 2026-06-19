@@ -4,16 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api_client.dart';
 
-/// One chat turn held in the panel's local history.
+/// One chat turn held in the panel's local history. Assistant turns may also
+/// carry the agent's tool [steps] and any [pending] approval-gated actions.
 class _Turn {
-  _Turn(this.role, this.content);
+  _Turn(this.role, this.content,
+      {this.steps = const [], List<PendingAction>? pending})
+      : pending = pending ?? [];
+
   final String role; // 'user' | 'assistant'
   final String content;
+  final List<AgentStep> steps;
+  final List<PendingAction> pending; // mutable; entries drop as confirmed
 }
 
-/// The Copilot panel (VISION.md Phase 3): a local-LLM chat assistant for
-/// prompt-writing, copy, captions, and studio help. Talks to our backend
-/// (`/api/v1/copilot/chat`), never to the LLM directly.
+/// The Copilot panel (VISION.md Phase 3). Two modes:
+/// * **Chat** — a local-LLM assistant for prompts, copy, and studio help.
+/// * **Agent** — a tool-calling loop that can act in the studio (generate,
+///   edit, find leads), with approval gates on anything that reaches outside.
+/// Talks only to our backend (CLAUDE.md prime directive #3), never the LLM.
 class CopilotPanel extends ConsumerStatefulWidget {
   const CopilotPanel({super.key});
 
@@ -26,7 +34,8 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
   final _scroll = ScrollController();
   final List<_Turn> _turns = [];
   bool _sending = false;
-  String _streaming = ''; // assistant text accumulating during a stream
+  bool _agentMode = true;
+  String _streaming = ''; // assistant text accumulating during a chat stream
   String? _error;
 
   @override
@@ -50,20 +59,16 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
     });
     _scrollToEnd();
 
+    final history = [
+      for (final t in _turns) {'role': t.role, 'content': t.content},
+    ];
+
     try {
-      final history = [
-        for (final t in _turns) {'role': t.role, 'content': t.content},
-      ];
-      final reply = await ref.read(apiClientProvider).copilotChatStream(
-        history,
-        onToken: (chunk) {
-          if (!mounted) return;
-          setState(() => _streaming += chunk);
-          _scrollToEnd();
-        },
-      );
-      if (!mounted) return;
-      setState(() => _turns.add(_Turn('assistant', reply)));
+      if (_agentMode) {
+        await _runAgent(history);
+      } else {
+        await _runChat(history);
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = _describe(e));
@@ -78,11 +83,53 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
     }
   }
 
+  Future<void> _runChat(List<Map<String, String>> history) async {
+    final reply = await ref.read(apiClientProvider).copilotChatStream(
+      history,
+      onToken: (chunk) {
+        if (!mounted) return;
+        setState(() => _streaming += chunk);
+        _scrollToEnd();
+      },
+    );
+    if (!mounted) return;
+    setState(() => _turns.add(_Turn('assistant', reply)));
+  }
+
+  Future<void> _runAgent(List<Map<String, String>> history) async {
+    final reply = await ref.read(apiClientProvider).copilotAgent(history);
+    if (!mounted) return;
+    setState(() => _turns.add(_Turn(
+          'assistant',
+          reply.message,
+          steps: reply.steps,
+          pending: reply.pendingActions,
+        )));
+  }
+
+  /// Runs a user-confirmed approval-gated action, then swaps its card for a
+  /// completed step chip on the owning turn.
+  Future<void> _confirm(_Turn turn, PendingAction action) async {
+    try {
+      final step = await ref
+          .read(apiClientProvider)
+          .copilotAgentConfirm(action.tool, action.args);
+      if (!mounted) return;
+      setState(() {
+        turn.pending.remove(action);
+        turn.steps.add(step);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _describe(e));
+    }
+  }
+
   String _describe(Object e) {
     final s = '$e';
     if (s.contains('502') || s.contains('Connection')) {
       return 'Copilot is unreachable. Is the Ollama service running and a '
-          'model pulled (e.g. `ollama pull llama3.2`)?';
+          'tool-capable model pulled (e.g. `ollama pull qwen3`)?';
     }
     return s;
   }
@@ -108,7 +155,7 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
             child: Row(
               children: [
                 const Icon(Icons.smart_toy_outlined, size: 20),
@@ -120,25 +167,49 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
                   IconButton(
                     tooltip: 'Clear chat',
                     visualDensity: VisualDensity.compact,
-                    onPressed:
-                        _sending ? null : () => setState(_turns.clear),
+                    onPressed: _sending ? null : () => setState(_turns.clear),
                     icon: const Icon(Icons.delete_outline, size: 18),
                   ),
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: SegmentedButton<bool>(
+              showSelectedIcon: false,
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              segments: const [
+                ButtonSegment(value: true, label: Text('Agent')),
+                ButtonSegment(value: false, label: Text('Chat')),
+              ],
+              selected: {_agentMode},
+              onSelectionChanged: _sending
+                  ? null
+                  : (s) => setState(() => _agentMode = s.first),
+            ),
+          ),
           Expanded(
             child: _turns.isEmpty
-                ? const _EmptyState()
+                ? _EmptyState(agentMode: _agentMode)
                 : Builder(builder: (context) {
                     final showStreaming = _sending && _streaming.isNotEmpty;
                     return ListView.builder(
                       controller: _scroll,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       itemCount: _turns.length + (showStreaming ? 1 : 0),
-                      itemBuilder: (context, i) => i < _turns.length
-                          ? _Bubble(turn: _turns[i])
-                          : _Bubble(turn: _Turn('assistant', _streaming)),
+                      itemBuilder: (context, i) {
+                        if (i >= _turns.length) {
+                          return _Bubble(turn: _Turn('assistant', _streaming));
+                        }
+                        final turn = _turns[i];
+                        return _Bubble(
+                          turn: turn,
+                          onConfirm: (a) => _confirm(turn, a),
+                        );
+                      },
                     );
                   }),
           ),
@@ -149,16 +220,17 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
                   style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
             ),
           if (_sending && _streaming.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Row(
                 children: [
-                  SizedBox(
+                  const SizedBox(
                       width: 14,
                       height: 14,
                       child: CircularProgressIndicator(strokeWidth: 2)),
-                  SizedBox(width: 8),
-                  Text('Thinking…', style: TextStyle(fontSize: 12)),
+                  const SizedBox(width: 8),
+                  Text(_agentMode ? 'Working…' : 'Thinking…',
+                      style: const TextStyle(fontSize: 12)),
                 ],
               ),
             ),
@@ -174,9 +246,11 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
                     maxLines: 4,
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
-                    decoration: const InputDecoration(
-                      hintText: 'Ask for a prompt, caption, idea…',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      hintText: _agentMode
+                          ? 'Ask me to generate, edit, find leads…'
+                          : 'Ask for a prompt, caption, idea…',
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
@@ -196,7 +270,8 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
 }
 
 class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  const _EmptyState({required this.agentMode});
+  final bool agentMode;
 
   @override
   Widget build(BuildContext context) {
@@ -210,8 +285,11 @@ class _EmptyState extends StatelessWidget {
             const Icon(Icons.smart_toy_outlined, size: 40),
             const SizedBox(height: 12),
             Text(
-              'Your local creative assistant.\n'
-              'Try: "Write an image prompt for a cozy autumn café."',
+              agentMode
+                  ? 'Your local studio agent.\n'
+                      'Try: "Generate a 1024×1024 cozy autumn café image."'
+                  : 'Your local creative assistant.\n'
+                      'Try: "Write an image prompt for a cozy autumn café."',
               textAlign: TextAlign.center,
               style: style,
             ),
@@ -223,8 +301,9 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.turn});
+  const _Bubble({required this.turn, this.onConfirm});
   final _Turn turn;
+  final void Function(PendingAction action)? onConfirm;
 
   @override
   Widget build(BuildContext context) {
@@ -235,7 +314,7 @@ class _Bubble extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        constraints: const BoxConstraints(maxWidth: 260),
+        constraints: const BoxConstraints(maxWidth: 280),
         decoration: BoxDecoration(
           color: isUser ? scheme.primaryContainer : scheme.surface,
           borderRadius: BorderRadius.circular(12),
@@ -243,8 +322,17 @@ class _Bubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SelectableText(turn.content),
-            if (!isUser)
+            for (final step in turn.steps) _StepRow(step: step),
+            if (turn.steps.isNotEmpty && turn.content.isNotEmpty)
+              const SizedBox(height: 6),
+            if (turn.content.isNotEmpty) SelectableText(turn.content),
+            for (final action in turn.pending)
+              _ApprovalCard(
+                action: action,
+                onConfirm:
+                    onConfirm == null ? null : () => onConfirm!(action),
+              ),
+            if (!isUser && turn.content.isNotEmpty)
               Align(
                 alignment: Alignment.centerRight,
                 child: IconButton(
@@ -263,6 +351,86 @@ class _Bubble extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A single executed/failed tool step, shown as a compact icon + summary row.
+class _StepRow extends StatelessWidget {
+  const _StepRow({required this.step});
+  final AgentStep step;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, color) = switch (step.status) {
+      'failed' => (Icons.error_outline, Colors.redAccent),
+      'pending_approval' => (Icons.schedule, Colors.orangeAccent),
+      _ => (Icons.check_circle_outline, Colors.green),
+    };
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              step.summary.isEmpty ? step.tool : step.summary,
+              style: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// An approval gate for an outbound/irreversible action the agent proposed.
+class _ApprovalCard extends StatelessWidget {
+  const _ApprovalCard({required this.action, this.onConfirm});
+  final PendingAction action;
+  final VoidCallback? onConfirm;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.shield_outlined, size: 14),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text('Needs your approval',
+                    style: Theme.of(context).textTheme.labelMedium),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(action.label, style: const TextStyle(fontSize: 12)),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton.tonalIcon(
+              onPressed: onConfirm,
+              style: FilledButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
+              icon: const Icon(Icons.play_arrow, size: 16),
+              label: const Text('Run'),
+            ),
+          ),
+        ],
       ),
     );
   }

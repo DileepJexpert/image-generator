@@ -244,6 +244,37 @@ class ApiClient {
     return full.toString();
   }
 
+  // --- Copilot agent (tool-calling loop) -----------------------------------
+
+  /// Runs one agent turn. The backend may call tools (generation/edit/leads/
+  /// project reads) and returns the final reply plus the tool steps it ran and
+  /// any approval-gated actions awaiting the user's confirmation.
+  Future<AgentReply> copilotAgent(
+    List<Map<String, String>> messages, {
+    String? model,
+  }) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/copilot/agent',
+      data: {
+        'messages': messages,
+        if (model != null && model.isNotEmpty) 'model': model,
+      },
+      options: Options(receiveTimeout: const Duration(minutes: 5)),
+    );
+    return AgentReply.fromJson(res.data!);
+  }
+
+  /// Executes an approval-gated action the user confirmed; returns the step
+  /// (including any `jobId` to track over the job WebSocket).
+  Future<AgentStep> copilotAgentConfirm(
+      String tool, Map<String, dynamic> args) async {
+    final res = await _dio.post<Map<String, dynamic>>(
+      '/copilot/agent/confirm',
+      data: {'tool': tool, 'args': args},
+    );
+    return AgentStep.fromJson(res.data!);
+  }
+
   /// Lists models available in the local Ollama instance (names only).
   Future<List<String>> copilotModels() async {
     final res = await _dio.get<List<dynamic>>('/copilot/models');
@@ -296,6 +327,72 @@ class ApiClient {
     );
     return Uint8List.fromList(res.data!);
   }
+}
+
+/// One tool the agent ran (or proposed), mirroring the backend `ToolStep`.
+class AgentStep {
+  AgentStep({
+    required this.tool,
+    required this.status,
+    required this.summary,
+    this.jobId,
+    this.args = const {},
+  });
+
+  final String tool;
+  final String status; // done | failed | pending_approval
+  final String summary;
+  final String? jobId;
+  final Map<String, dynamic> args;
+
+  factory AgentStep.fromJson(Map<String, dynamic> json) => AgentStep(
+        tool: json['tool'] as String? ?? 'tool',
+        status: json['status'] as String? ?? 'done',
+        summary: json['summary'] as String? ?? '',
+        jobId: json['jobId'] as String?,
+        args: (json['args'] as Map<String, dynamic>?) ?? const {},
+      );
+}
+
+/// An approval-gated action the user must confirm before it runs.
+class PendingAction {
+  PendingAction({required this.tool, required this.label, required this.args});
+
+  final String tool;
+  final String label;
+  final Map<String, dynamic> args;
+
+  factory PendingAction.fromJson(Map<String, dynamic> json) => PendingAction(
+        tool: json['tool'] as String,
+        label: json['label'] as String? ?? 'Run ${json['tool']}',
+        args: (json['args'] as Map<String, dynamic>?) ?? const {},
+      );
+}
+
+/// The result of an agent turn: the reply text, executed steps, and any
+/// actions awaiting confirmation.
+class AgentReply {
+  AgentReply({
+    required this.message,
+    required this.steps,
+    required this.pendingActions,
+  });
+
+  final String message;
+  final List<AgentStep> steps;
+  final List<PendingAction> pendingActions;
+
+  factory AgentReply.fromJson(Map<String, dynamic> json) => AgentReply(
+        message:
+            (json['message'] as Map<String, dynamic>?)?['content'] as String? ??
+                '',
+        steps: ((json['steps'] as List<dynamic>?) ?? [])
+            .map((e) => AgentStep.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        pendingActions: ((json['pendingActions'] as List<dynamic>?) ?? [])
+            .map((e) => PendingAction.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
 }
 
 /// Minimal list/summary view of a project (matches the backend list payload).

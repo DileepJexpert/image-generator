@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.katixo.studio.config.KatixoProperties;
 import com.katixo.studio.copilot.CopilotDtos.ModelSummary;
+import com.katixo.studio.copilot.agent.AssistantTurn;
+import com.katixo.studio.copilot.agent.AssistantTurn.ToolCall;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -118,6 +120,71 @@ public class OllamaClient {
                 }
             }
         }
+    }
+
+    /**
+     * Runs one buffered (non-streaming) tool-enabled chat turn. The model may
+     * answer with plain content or request one or more tool calls
+     * ({@code message.tool_calls}). Tool turns must be buffered — streaming +
+     * tool calls together is not yet reliable across Ollama models.
+     *
+     * @param messages pre-built conversation array (system/user/assistant/tool),
+     *                 owned and mutated by the agent loop
+     * @param tools    the tool specs the model may call
+     */
+    public AssistantTurn chatWithTools(String model, ArrayNode messages, ArrayNode tools)
+            throws IOException, InterruptedException {
+
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("model", model);
+        body.put("stream", false);
+        body.set("messages", messages);
+        body.set("tools", tools);
+        // Tool selection is far more reliable at low temperature on local models.
+        body.putObject("options").put("temperature", 0.1);
+
+        HttpRequest request = HttpRequest.newBuilder(URI.create(base() + "/api/chat"))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofMinutes(5))
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
+                .build();
+
+        HttpResponse<String> response =
+                httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() / 100 != 2) {
+            throw new IOException("Ollama /api/chat (tools) failed (" + response.statusCode()
+                    + "): " + response.body());
+        }
+
+        JsonNode message = objectMapper.readTree(response.body()).path("message");
+        String content = message.path("content").asText("");
+        List<ToolCall> calls = new ArrayList<>();
+        for (JsonNode call : message.path("tool_calls")) {
+            JsonNode fn = call.path("function");
+            String name = fn.path("name").asText();
+            if (name.isBlank()) {
+                continue;
+            }
+            calls.add(new ToolCall(name, parseArguments(fn.path("arguments"))));
+        }
+        return new AssistantTurn(message, content, calls);
+    }
+
+    /**
+     * Ollama usually returns tool-call arguments as a JSON object, but some
+     * models emit a JSON string; accept both so the agent gets a real node.
+     */
+    private JsonNode parseArguments(JsonNode arguments) {
+        if (arguments.isTextual()) {
+            try {
+                return objectMapper.readTree(arguments.asText());
+            } catch (IOException e) {
+                return objectMapper.createObjectNode();
+            }
+        }
+        return arguments.isMissingNode() || arguments.isNull()
+                ? objectMapper.createObjectNode()
+                : arguments;
     }
 
     /** Lists models pulled into the local Ollama instance. */
