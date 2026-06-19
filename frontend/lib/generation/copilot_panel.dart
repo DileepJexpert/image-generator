@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api_client.dart';
 import '../core/ws_client.dart';
+import '../editor/model/design_element.dart';
+import '../editor/state/editor_controller.dart';
 import 'canvas_placement.dart';
 
 /// One chat turn held in the panel's local history. Assistant turns may also
@@ -39,12 +41,14 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
   final List<_Turn> _turns = [];
   bool _sending = false;
   bool _agentMode = true;
+  bool _autoApprove = false; // Cline-style: run gated actions without a prompt
   String _streaming = ''; // assistant text accumulating during a chat stream
   String? _error;
 
   // Jobs started by the agent's tools, tracked to completion so their results
-  // land on the canvas. Keyed by jobId -> live status line.
-  final Map<String, String> _activeJobs = {};
+  // land on the canvas. Progress feeds the matching step row live.
+  final Map<String, int> _jobProgress = {}; // jobId -> percent (running)
+  final Set<String> _finishedJobs = {}; // jobIds that landed on the canvas
   final List<JobSocket> _jobSockets = [];
   final List<StreamSubscription<JobProgress>> _jobSubs = [];
 
@@ -113,20 +117,61 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
   }
 
   Future<void> _runAgent(List<Map<String, String>> history) async {
-    final reply = await ref.read(apiClientProvider).copilotAgent(history);
+    final reply = await ref
+        .read(apiClientProvider)
+        .copilotAgent(history, context: _editorContext());
     if (!mounted) return;
-    setState(() => _turns.add(_Turn(
-          'assistant',
-          reply.message,
-          steps: reply.steps,
-          pending: reply.pendingActions,
-        )));
+    final turn = _Turn(
+      'assistant',
+      reply.message,
+      steps: reply.steps,
+      pending: reply.pendingActions,
+    );
+    setState(() => _turns.add(turn));
     for (final step in reply.steps) {
       if (step.jobId != null) {
         _trackJob(step.jobId!, _jobLabel(step.tool));
       }
     }
+    // Auto-approve: run any gated actions immediately instead of showing cards.
+    if (_autoApprove) {
+      for (final action in List.of(turn.pending)) {
+        await _confirm(turn, action);
+      }
+    }
   }
+
+  /// Snapshot of the editor the agent can use to resolve "this"/"the selected
+  /// image" to a real assetId without the user pasting an id.
+  Map<String, dynamic>? _editorContext() {
+    final editor = ref.read(editorControllerProvider);
+    final project = editor.project;
+    if (project == null) {
+      return null;
+    }
+    Map<String, dynamic> describe(DesignElement e) => {
+          'id': e.id,
+          'type': _elementType(e),
+          if (e.assetIdOrNull != null) 'assetId': e.assetIdOrNull,
+        };
+    final selected = editor.selected;
+    final page = editor.currentPage;
+    return {
+      'projectName': project.name,
+      'canvasWidth': project.canvasWidth,
+      'canvasHeight': project.canvasHeight,
+      if (selected != null) 'selected': describe(selected),
+      if (page != null)
+        'elements': [for (final e in page.elements) describe(e)],
+    };
+  }
+
+  String _elementType(DesignElement e) => e.map(
+        text: (_) => 'text',
+        image: (_) => 'image',
+        shape: (_) => 'shape',
+        video: (_) => 'video',
+      );
 
   /// Runs a user-confirmed approval-gated action, then swaps its card for a
   /// completed step chip on the owning turn.
@@ -154,19 +199,18 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
   void _trackJob(String jobId, String label) {
     final socket = JobSocket(jobId);
     _jobSockets.add(socket);
-    setState(() => _activeJobs[jobId] = '$label…');
+    setState(() => _jobProgress[jobId] = 0);
 
     late final StreamSubscription<JobProgress> sub;
     sub = socket.progress.listen(
       (event) async {
         if (!mounted) return;
-        setState(() => _activeJobs[jobId] =
-            '$label… ${event.progress > 0 ? '${event.progress}%' : ''}');
+        setState(() => _jobProgress[jobId] = event.progress);
         if (event.isDone && event.resultAssetId != null) {
           final msg = await placeJobResultOnCanvas(ref,
               assetId: event.resultAssetId!, jobType: event.type);
           if (msg != null) _toast(msg);
-          _endJob(jobId, socket, sub);
+          _endJob(jobId, socket, sub, finished: true);
         } else if (event.isFailed) {
           _toast('$label failed: ${event.error ?? ''}');
           _endJob(jobId, socket, sub);
@@ -180,13 +224,17 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
     _jobSubs.add(sub);
   }
 
-  void _endJob(String jobId, JobSocket socket, StreamSubscription<JobProgress> sub) {
+  void _endJob(String jobId, JobSocket socket, StreamSubscription<JobProgress> sub,
+      {bool finished = false}) {
     sub.cancel();
     socket.close();
     _jobSubs.remove(sub);
     _jobSockets.remove(socket);
     if (mounted) {
-      setState(() => _activeJobs.remove(jobId));
+      setState(() {
+        _jobProgress.remove(jobId);
+        if (finished) _finishedJobs.add(jobId);
+      });
     }
   }
 
@@ -272,6 +320,26 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
                   : (s) => setState(() => _agentMode = s.first),
             ),
           ),
+          if (_agentMode)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 8, 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.shield_outlined, size: 14),
+                  const SizedBox(width: 6),
+                  const Expanded(
+                    child: Text('Auto-approve actions',
+                        style: TextStyle(fontSize: 12)),
+                  ),
+                  Switch.adaptive(
+                    value: _autoApprove,
+                    onChanged: _sending
+                        ? null
+                        : (v) => setState(() => _autoApprove = v),
+                  ),
+                ],
+              ),
+            ),
           Expanded(
             child: _turns.isEmpty
                 ? _EmptyState(agentMode: _agentMode)
@@ -289,34 +357,13 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
                         return _Bubble(
                           turn: turn,
                           onConfirm: (a) => _confirm(turn, a),
+                          jobProgress: _jobProgress,
+                          finishedJobs: _finishedJobs,
                         );
                       },
                     );
                   }),
           ),
-          if (_activeJobs.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  for (final status in _activeJobs.values)
-                    Row(
-                      children: [
-                        const SizedBox(
-                            width: 12,
-                            height: 12,
-                            child: CircularProgressIndicator(strokeWidth: 2)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(status,
-                              style: const TextStyle(fontSize: 12)),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            ),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -405,9 +452,16 @@ class _EmptyState extends StatelessWidget {
 }
 
 class _Bubble extends StatelessWidget {
-  const _Bubble({required this.turn, this.onConfirm});
+  const _Bubble({
+    required this.turn,
+    this.onConfirm,
+    this.jobProgress = const {},
+    this.finishedJobs = const {},
+  });
   final _Turn turn;
   final void Function(PendingAction action)? onConfirm;
+  final Map<String, int> jobProgress; // live percent for running tool jobs
+  final Set<String> finishedJobs; // jobs whose result reached the canvas
 
   @override
   Widget build(BuildContext context) {
@@ -426,7 +480,14 @@ class _Bubble extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final step in turn.steps) _StepRow(step: step),
+            for (final step in turn.steps)
+              _StepRow(
+                step: step,
+                jobProgress:
+                    step.jobId != null ? jobProgress[step.jobId] : null,
+                finished:
+                    step.jobId != null && finishedJobs.contains(step.jobId),
+              ),
             if (turn.steps.isNotEmpty && turn.content.isNotEmpty)
               const SizedBox(height: 6),
             if (turn.content.isNotEmpty) SelectableText(turn.content),
@@ -460,28 +521,55 @@ class _Bubble extends StatelessWidget {
   }
 }
 
-/// A single executed/failed tool step, shown as a compact icon + summary row.
+/// A single tool step, shown as a compact icon + summary row. When the step
+/// started a background job, it reflects that job's live progress (and a check
+/// once the result has landed on the canvas).
 class _StepRow extends StatelessWidget {
-  const _StepRow({required this.step});
+  const _StepRow({required this.step, this.jobProgress, this.finished = false});
   final AgentStep step;
+  final int? jobProgress; // non-null while the step's job is running
+  final bool finished; // job completed and result placed
 
   @override
   Widget build(BuildContext context) {
-    final (icon, color) = switch (step.status) {
-      'failed' => (Icons.error_outline, Colors.redAccent),
-      'pending_approval' => (Icons.schedule, Colors.orangeAccent),
-      _ => (Icons.check_circle_outline, Colors.green),
-    };
+    final running = jobProgress != null;
+    final Widget leading;
+    if (running) {
+      leading = SizedBox(
+        width: 14,
+        height: 14,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          value: jobProgress! > 0 ? jobProgress! / 100 : null,
+        ),
+      );
+    } else {
+      final (icon, color) = finished
+          ? (Icons.check_circle, Colors.green)
+          : switch (step.status) {
+              'failed' => (Icons.error_outline, Colors.redAccent),
+              'pending_approval' => (Icons.schedule, Colors.orangeAccent),
+              _ => (Icons.check_circle_outline, Colors.green),
+            };
+      leading = Icon(icon, size: 14, color: color);
+    }
+
+    final suffix = running && jobProgress! > 0
+        ? '  ${jobProgress!}%'
+        : finished
+            ? '  · added to canvas'
+            : '';
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 14, color: color),
+          leading,
           const SizedBox(width: 6),
           Expanded(
             child: Text(
-              step.summary.isEmpty ? step.tool : step.summary,
+              '${step.summary.isEmpty ? step.tool : step.summary}$suffix',
               style: const TextStyle(fontSize: 12),
             ),
           ),

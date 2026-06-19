@@ -22,8 +22,28 @@ public final class AgentDtos {
     /** A turn submission. The frontend owns history; the backend is stateless. */
     public record AgentRequest(
             @NotEmpty List<ChatMessage> messages,
-            String model
+            String model,
+            EditorContext context
     ) {
+    }
+
+    /**
+     * A snapshot of what the user is looking at in the editor, so the agent can
+     * resolve references like "this" or "the selected image" to a real assetId
+     * without the user pasting an id (Cursor-style context injection). All
+     * fields optional — the panel sends what it has.
+     */
+    public record EditorContext(
+            String projectName,
+            Integer canvasWidth,
+            Integer canvasHeight,
+            ContextElement selected,
+            List<ContextElement> elements
+    ) {
+    }
+
+    /** A canvas element the agent can reference (id + kind + backing asset). */
+    public record ContextElement(String id, String type, String assetId) {
     }
 
     /**

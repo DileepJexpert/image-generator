@@ -9,6 +9,8 @@ import com.katixo.studio.copilot.OllamaClient;
 import com.katixo.studio.copilot.agent.AgentDtos.AgentRequest;
 import com.katixo.studio.copilot.agent.AgentDtos.AgentResponse;
 import com.katixo.studio.copilot.agent.AgentDtos.ConfirmRequest;
+import com.katixo.studio.copilot.agent.AgentDtos.ContextElement;
+import com.katixo.studio.copilot.agent.AgentDtos.EditorContext;
 import com.katixo.studio.copilot.agent.AgentDtos.PendingAction;
 import com.katixo.studio.copilot.agent.AgentDtos.ToolStep;
 import com.katixo.studio.copilot.agent.AssistantTurn.ToolCall;
@@ -50,6 +52,9 @@ public class AgentService {
             - Some tools require the user's confirmation (e.g. scraping external \
             sites). When you call one, it is proposed to the user rather than run; \
             tell them it's waiting for their approval.
+            - When the user refers to "this", "the selected image", or "it" \
+            without giving an id, use the assetId from the studio context below. \
+            Never invent ids — only use ids that appear in the context.
             - Pass only parameters the user actually specified; rely on sensible \
             defaults otherwise. Be concise and practical.""";
 
@@ -68,7 +73,7 @@ public class AgentService {
 
     public AgentResponse run(AgentRequest request) throws IOException, InterruptedException {
         String model = resolveModel(request.model());
-        ArrayNode messages = buildMessages(request.messages());
+        ArrayNode messages = buildMessages(request.messages(), request.context());
         ArrayNode tools = registry.specs();
 
         List<ToolStep> steps = new ArrayList<>();
@@ -142,13 +147,18 @@ public class AgentService {
         node.put("content", content);
     }
 
-    private ArrayNode buildMessages(List<ChatMessage> incoming) {
+    private ArrayNode buildMessages(List<ChatMessage> incoming, EditorContext context) {
         ArrayNode messages = mapper.createArrayNode();
         boolean hasSystem = incoming.stream().anyMatch(m -> "system".equalsIgnoreCase(m.role()));
         if (!hasSystem) {
+            String content = SYSTEM_PROMPT;
+            String contextBlock = contextBlock(context);
+            if (contextBlock != null) {
+                content = content + "\n\n" + contextBlock;
+            }
             ObjectNode sys = messages.addObject();
             sys.put("role", "system");
-            sys.put("content", SYSTEM_PROMPT);
+            sys.put("content", content);
         }
         for (ChatMessage m : incoming) {
             ObjectNode node = messages.addObject();
@@ -156,6 +166,46 @@ public class AgentService {
             node.put("content", m.content());
         }
         return messages;
+    }
+
+    /** Renders the editor snapshot as a compact prompt block, or null if empty. */
+    private String contextBlock(EditorContext c) {
+        if (c == null) {
+            return null;
+        }
+        boolean hasElements = c.elements() != null && !c.elements().isEmpty();
+        if (c.projectName() == null && c.selected() == null && !hasElements) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder("Current studio context (only use ids that appear here):");
+        if (c.projectName() != null) {
+            sb.append("\n- Project: \"").append(c.projectName()).append('"');
+            if (c.canvasWidth() != null && c.canvasHeight() != null) {
+                sb.append(" (canvas ").append(c.canvasWidth()).append('x')
+                        .append(c.canvasHeight()).append(')');
+            }
+        }
+        if (c.selected() != null) {
+            sb.append("\n- Selected element: ").append(describe(c.selected()))
+                    .append(" — this is what \"this\"/\"the selected\" refers to.");
+        }
+        if (hasElements) {
+            sb.append("\n- Canvas elements:");
+            for (ContextElement e : c.elements()) {
+                sb.append("\n  • ").append(describe(e));
+            }
+        }
+        return sb.toString();
+    }
+
+    private String describe(ContextElement e) {
+        StringBuilder sb = new StringBuilder(e.type() == null ? "element" : e.type());
+        if (e.assetId() != null) {
+            sb.append(" (assetId ").append(e.assetId()).append(')');
+        } else if (e.id() != null) {
+            sb.append(" (id ").append(e.id()).append(')');
+        }
+        return sb.toString();
     }
 
     private String resolveModel(String requested) {

@@ -252,12 +252,14 @@ class ApiClient {
   Future<AgentReply> copilotAgent(
     List<Map<String, String>> messages, {
     String? model,
+    Map<String, dynamic>? context,
   }) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/copilot/agent',
       data: {
         'messages': messages,
         if (model != null && model.isNotEmpty) 'model': model,
+        if (context != null) 'context': context,
       },
       options: Options(receiveTimeout: const Duration(minutes: 5)),
     );

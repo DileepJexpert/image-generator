@@ -52,7 +52,7 @@ class AgentServiceTest {
                 new AssistantTurn(mapper.createObjectNode(), "All done.", List.of()));
 
         AgentResponse resp = serviceWith(ollama, echo)
-                .run(new AgentRequest(List.of(new ChatMessage("user", "go")), null));
+                .run(new AgentRequest(List.of(new ChatMessage("user", "go")), null, null));
 
         assertThat(captured.get()).isEqualTo(args);
         assertThat(resp.message().content()).isEqualTo("All done.");
@@ -79,7 +79,7 @@ class AgentServiceTest {
                 new AssistantTurn(mapper.createObjectNode(), "Waiting on you.", List.of()));
 
         AgentResponse resp = serviceWith(ollama, scrape)
-                .run(new AgentRequest(List.of(new ChatMessage("user", "find leads")), null));
+                .run(new AgentRequest(List.of(new ChatMessage("user", "find leads")), null, null));
 
         assertThat(ran.get()).isFalse();
         assertThat(resp.pendingActions()).singleElement()
