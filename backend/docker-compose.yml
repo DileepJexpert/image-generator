@@ -104,8 +104,10 @@ services:
   # it's part of the always-runnable subset (works on a laptop without an NVIDIA
   # GPU). For GPU acceleration on the workstation, add a deploy.resources.
   # reservations.devices block like comfyui/esrgan above.
-  # Pull a model once the stack is up, e.g.:
-  #   docker compose exec ollama ollama pull llama3.2
+  # Pull a model once the stack is up. The Copilot's Agent mode needs a
+  # tool-capable model; qwen3 (8B) is free, fits a 12GB GPU, and is the default:
+  #   docker compose exec ollama ollama pull qwen3
+  # (A smaller model like llama3.2 works for plain Chat but misfires on tools.)
   ollama:
     image: ollama/ollama:latest
     ports:
@@ -148,7 +150,7 @@ services:
       WHISPER_URL: http://whisper:7003
       # Copilot LLM (VISION.md Phase 3).
       OLLAMA_URL: http://ollama:11434
-      COPILOT_MODEL: llama3.2
+      COPILOT_MODEL: qwen3
     ports:
       - "8585:8585"
     volumes:

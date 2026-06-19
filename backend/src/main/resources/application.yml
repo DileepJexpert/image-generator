@@ -31,9 +31,11 @@ katixo:
   # Speech-to-text sidecar (faster-whisper) for transcription / captions.
   whisper-url: ${WHISPER_URL:http://localhost:7003}
   # Local LLM (Ollama) powering the Copilot. copilot-model is the default model
-  # used when a chat request doesn't name one; it must be pulled into Ollama.
+  # used when a request doesn't name one; it must be pulled into Ollama. Default
+  # is qwen3 (8B): a tool-capable, free model that fits a 12GB GPU and drives the
+  # agent loop far more reliably than smaller models (e.g. llama3.2 3B).
   ollama-url: ${OLLAMA_URL:http://localhost:11434}
-  copilot-model: ${COPILOT_MODEL:llama3.2}
+  copilot-model: ${COPILOT_MODEL:qwen3}
   asset-storage-path: ${ASSET_STORAGE_PATH:/data/assets}
 
 server:
