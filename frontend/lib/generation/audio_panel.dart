@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -61,6 +62,8 @@ class _AudioPanelState extends ConsumerState<AudioPanel> {
   String? _error;
 
   String? _audioAssetId;
+  String? _audioLabel; // 'Generated voiceover' or an uploaded file name.
+  bool _audioGenerated = false; // true → we made it (offer Save).
   _Transcript? _transcript;
 
   @override
@@ -115,6 +118,8 @@ class _AudioPanelState extends ConsumerState<AudioPanel> {
       _status = 'Submitting…';
       _error = null;
       _audioAssetId = null;
+      _audioLabel = null;
+      _audioGenerated = false;
       _transcript = null;
     });
     try {
@@ -122,10 +127,50 @@ class _AudioPanelState extends ConsumerState<AudioPanel> {
       final jobId = await api.generateSpeech(_text.text.trim());
       final assetId = await _runJob(jobId);
       if (!mounted) return;
-      setState(() => _audioAssetId = assetId);
+      setState(() {
+        _audioAssetId = assetId;
+        _audioLabel = 'Generated voiceover';
+        _audioGenerated = true;
+      });
       _toast('Voiceover ready');
     } catch (e) {
       _fail('$e', 'Voiceover');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Upload an existing audio clip so it can be transcribed (captions for
+  /// recordings, not just generated voiceovers).
+  Future<void> _uploadAudio() async {
+    if (_busy) return;
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['wav', 'mp3', 'm4a', 'ogg', 'flac', 'webm', 'aac'],
+      withData: true,
+    );
+    if (result == null || result.files.single.bytes == null) {
+      return;
+    }
+    final file = result.files.single;
+    setState(() {
+      _busy = true;
+      _status = 'Uploading…';
+      _error = null;
+      _transcript = null;
+    });
+    try {
+      final assetId =
+          await ref.read(apiClientProvider).uploadAsset(file.bytes!, file.name);
+      if (!mounted) return;
+      setState(() {
+        _audioAssetId = assetId;
+        _audioLabel = file.name;
+        _audioGenerated = false;
+      });
+      _toast('Uploaded — ready to transcribe');
+    } catch (e) {
+      _fail('$e', 'Upload');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -256,6 +301,12 @@ class _AudioPanelState extends ConsumerState<AudioPanel> {
             icon: const Icon(Icons.record_voice_over),
             label: Text(_busy ? 'Working…' : 'Generate voiceover'),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _busy ? null : _uploadAudio,
+            icon: const Icon(Icons.upload_file),
+            label: const Text('Upload a clip to transcribe'),
+          ),
           if (_busy) ...[
             const SizedBox(height: 16),
             LinearProgressIndicator(value: _progress > 0 ? _progress / 100 : null),
@@ -265,6 +316,11 @@ class _AudioPanelState extends ConsumerState<AudioPanel> {
           ],
           if (_audioAssetId != null) ...[
             const SizedBox(height: 16),
+            if (_audioLabel != null)
+              Text(_audioLabel!,
+                  style: Theme.of(context).textTheme.bodySmall,
+                  overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
@@ -274,14 +330,16 @@ class _AudioPanelState extends ConsumerState<AudioPanel> {
                     label: const Text('Play'),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: _busy ? null : _downloadAudio,
-                    icon: const Icon(Icons.download),
-                    label: const Text('Save'),
+                if (_audioGenerated) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _busy ? null : _downloadAudio,
+                      icon: const Icon(Icons.download),
+                      label: const Text('Save'),
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
             const SizedBox(height: 8),

@@ -134,8 +134,9 @@ implementation time. VRAM tiers are rough guidance.
   a TTS sidecar (voiceover). New `audio` asset type; timeline gains an audio track.
   *In:* Piper TTS sidecar + `POST /api/v1/generate/speech`; faster-whisper STT
   sidecar + `POST /api/v1/transcribe` (transcript JSON stored as a `text` asset,
-  downloadable as WebVTT captions); both wired into the Voiceover panel.
-  *Next:* upload-any-clip transcription and an audio track on the canvas/timeline.
+  downloadable as WebVTT captions). The Voiceover panel both generates speech and
+  transcribes either that voiceover or an uploaded clip.
+  *Next:* an audio track on the canvas/timeline.
 - **Phase 3 — LLM Copilot + RAG.** Ollama sidecar; pgvector on Postgres; prompt
   enhancement, captions, chat, and the agent loop that calls our job APIs.
   *Started:* Ollama sidecar + a stateless Copilot chat API (`/api/v1/copilot/*`)
