@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/api_client.dart';
+import '../core/ws_client.dart';
+import 'canvas_placement.dart';
 
 /// One chat turn held in the panel's local history. Assistant turns may also
 /// carry the agent's tool [steps] and any [pending] approval-gated actions.
@@ -38,8 +42,20 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
   String _streaming = ''; // assistant text accumulating during a chat stream
   String? _error;
 
+  // Jobs started by the agent's tools, tracked to completion so their results
+  // land on the canvas. Keyed by jobId -> live status line.
+  final Map<String, String> _activeJobs = {};
+  final List<JobSocket> _jobSockets = [];
+  final List<StreamSubscription<JobProgress>> _jobSubs = [];
+
   @override
   void dispose() {
+    for (final sub in _jobSubs) {
+      sub.cancel();
+    }
+    for (final socket in _jobSockets) {
+      socket.close();
+    }
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -105,6 +121,11 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
           steps: reply.steps,
           pending: reply.pendingActions,
         )));
+    for (final step in reply.steps) {
+      if (step.jobId != null) {
+        _trackJob(step.jobId!, _jobLabel(step.tool));
+      }
+    }
   }
 
   /// Runs a user-confirmed approval-gated action, then swaps its card for a
@@ -119,11 +140,71 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
         turn.pending.remove(action);
         turn.steps.add(step);
       });
+      if (step.jobId != null) {
+        _trackJob(step.jobId!, _jobLabel(step.tool));
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = _describe(e));
     }
   }
+
+  /// Tracks a tool-started job to completion and places its result on the
+  /// canvas, surfacing live progress in the panel meanwhile.
+  void _trackJob(String jobId, String label) {
+    final socket = JobSocket(jobId);
+    _jobSockets.add(socket);
+    setState(() => _activeJobs[jobId] = '$label…');
+
+    late final StreamSubscription<JobProgress> sub;
+    sub = socket.progress.listen(
+      (event) async {
+        if (!mounted) return;
+        setState(() => _activeJobs[jobId] =
+            '$label… ${event.progress > 0 ? '${event.progress}%' : ''}');
+        if (event.isDone && event.resultAssetId != null) {
+          final msg = await placeJobResultOnCanvas(ref,
+              assetId: event.resultAssetId!, jobType: event.type);
+          if (msg != null) _toast(msg);
+          _endJob(jobId, socket, sub);
+        } else if (event.isFailed) {
+          _toast('$label failed: ${event.error ?? ''}');
+          _endJob(jobId, socket, sub);
+        }
+      },
+      onError: (Object e) {
+        _toast('$label error: $e');
+        _endJob(jobId, socket, sub);
+      },
+    );
+    _jobSubs.add(sub);
+  }
+
+  void _endJob(String jobId, JobSocket socket, StreamSubscription<JobProgress> sub) {
+    sub.cancel();
+    socket.close();
+    _jobSubs.remove(sub);
+    _jobSockets.remove(socket);
+    if (mounted) {
+      setState(() => _activeJobs.remove(jobId));
+    }
+  }
+
+  void _toast(String msg) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    }
+  }
+
+  /// Friendly label for a tool's background job.
+  String _jobLabel(String tool) => switch (tool) {
+        'generate_image' => 'Generating image',
+        'remove_background' => 'Removing background',
+        'upscale_image' => 'Upscaling',
+        'image_to_video' => 'Rendering video',
+        'scrape_leads' => 'Finding leads',
+        _ => 'Working',
+      };
 
   String _describe(Object e) {
     final s = '$e';
@@ -213,6 +294,29 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
                     );
                   }),
           ),
+          if (_activeJobs.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final status in _activeJobs.values)
+                    Row(
+                      children: [
+                        const SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(status,
+                              style: const TextStyle(fontSize: 12)),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
