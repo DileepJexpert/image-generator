@@ -8,6 +8,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/api_client.dart';
 import '../core/download/download.dart';
 import '../core/id.dart';
+import '../generation/audio_panel.dart';
+import '../generation/copilot_panel.dart';
 import '../generation/image_panel.dart';
 import 'canvas/editor_canvas.dart';
 import 'canvas/image_cache.dart';
@@ -33,6 +35,8 @@ class EditorPage extends ConsumerStatefulWidget {
 class _EditorPageState extends ConsumerState<EditorPage> {
   bool _loading = true;
   bool _showAiPanel = true;
+  bool _showCopilot = false;
+  bool _showAudio = false;
   String? _error;
 
   @override
@@ -210,6 +214,20 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             icon: const Icon(Icons.auto_awesome_outlined),
             selectedIcon: const Icon(Icons.auto_awesome),
           ),
+          IconButton(
+            tooltip: 'Voiceover',
+            isSelected: _showAudio,
+            onPressed: () => setState(() => _showAudio = !_showAudio),
+            icon: const Icon(Icons.record_voice_over_outlined),
+            selectedIcon: const Icon(Icons.record_voice_over),
+          ),
+          IconButton(
+            tooltip: 'Copilot',
+            isSelected: _showCopilot,
+            onPressed: () => setState(() => _showCopilot = !_showCopilot),
+            icon: const Icon(Icons.smart_toy_outlined),
+            selectedIcon: const Icon(Icons.smart_toy),
+          ),
           PopupMenuButton<String>(
             tooltip: 'Export',
             icon: const Icon(Icons.download_outlined),
@@ -245,6 +263,8 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                             onUploadImage: _uploadImage,
                           ),
                           if (_showAiPanel) const ImagePanel(),
+                          if (_showAudio) const AudioPanel(),
+                          if (_showCopilot) const CopilotPanel(),
                           const Expanded(child: EditorCanvas()),
                           const InspectorPanel(),
                         ],

@@ -26,7 +26,7 @@ public class AssetService {
     @Transactional
     public Asset saveUpload(byte[] bytes, String mime, String originalFilename) {
         String resolvedMime = (mime != null && !mime.isBlank()) ? mime : "application/octet-stream";
-        AssetType type = resolvedMime.startsWith("video/") ? AssetType.VIDEO : AssetType.IMAGE;
+        AssetType type = typeForMime(resolvedMime);
 
         Integer width = null;
         Integer height = null;
@@ -85,6 +85,16 @@ public class AssetService {
         return repository.save(asset);
     }
 
+    /** Store a generated audio clip (e.g. TTS voiceover). */
+    @Transactional
+    public Asset saveAudio(byte[] bytes, String mime, UUID sourceJobId) {
+        UUID id = UUID.randomUUID();
+        String filename = id + extensionFor(mime, null);
+        String key = storage.store(bytes, filename);
+        Asset asset = new Asset(id, AssetType.AUDIO, key, mime, null, null, sourceJobId);
+        return repository.save(asset);
+    }
+
     @Transactional(readOnly = true)
     public Optional<Asset> find(UUID id) {
         return repository.findById(id);
@@ -92,6 +102,17 @@ public class AssetService {
 
     public byte[] readBytes(Asset asset) {
         return storage.read(asset.getFilePath());
+    }
+
+    /** Pick the asset kind from a MIME type (audio/* and video/* recognised). */
+    private AssetType typeForMime(String mime) {
+        if (mime.startsWith("video/")) {
+            return AssetType.VIDEO;
+        }
+        if (mime.startsWith("audio/")) {
+            return AssetType.AUDIO;
+        }
+        return AssetType.IMAGE;
     }
 
     private String extensionFor(String mime, String originalFilename) {
@@ -105,6 +126,11 @@ public class AssetService {
                     return ".webp";
                 case "video/mp4":
                     return ".mp4";
+                case "audio/wav":
+                case "audio/x-wav":
+                    return ".wav";
+                case "audio/mpeg":
+                    return ".mp3";
                 default:
                     break;
             }

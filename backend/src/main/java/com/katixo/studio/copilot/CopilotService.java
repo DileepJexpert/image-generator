@@ -1,0 +1,68 @@
+package com.katixo.studio.copilot;
+
+import com.katixo.studio.config.KatixoProperties;
+import com.katixo.studio.copilot.CopilotDtos.ChatRequest;
+import com.katixo.studio.copilot.CopilotDtos.ChatResponse;
+import com.katixo.studio.copilot.CopilotDtos.ModelSummary;
+import org.springframework.stereotype.Service;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Orchestrates Copilot chat: resolves the model, injects the studio system
+ * prompt, and delegates to {@link OllamaClient}. Controllers stay thin
+ * (CLAUDE.md §6).
+ */
+@Service
+public class CopilotService {
+
+    /**
+     * Frames the assistant as Katixo's in-app creative copilot. Phase 3 keeps
+     * this as plain chat/assist; the tool-driving agent loop arrives in a later
+     * phase (see VISION.md).
+     */
+    private static final String SYSTEM_PROMPT = """
+            You are Katixo Copilot, the built-in assistant of Katixo Studio — a \
+            local, GPU-powered design and media studio. Help the user create: \
+            write and refine image/video generation prompts, suggest layouts, \
+            captions, and copy, and answer questions about using the studio. \
+            Be concise and practical. When asked for an image prompt, return a \
+            single vivid prompt the user can paste into the image panel.""";
+
+    private final OllamaClient ollama;
+    private final KatixoProperties properties;
+
+    public CopilotService(OllamaClient ollama, KatixoProperties properties) {
+        this.ollama = ollama;
+        this.properties = properties;
+    }
+
+    public ChatResponse chat(ChatRequest request) throws IOException, InterruptedException {
+        String model = (request.model() == null || request.model().isBlank())
+                ? properties.copilotModel()
+                : request.model();
+
+        List<ChatMessage> messages = withSystemPrompt(request.messages());
+        String reply = ollama.chat(model, messages);
+        return new ChatResponse(model, ChatMessage.assistant(reply));
+    }
+
+    public List<ModelSummary> listModels() throws IOException, InterruptedException {
+        return ollama.listModels();
+    }
+
+    /** Prepend the studio system prompt unless the caller already set one. */
+    private List<ChatMessage> withSystemPrompt(List<ChatMessage> incoming) {
+        boolean hasSystem = incoming.stream()
+                .anyMatch(m -> "system".equalsIgnoreCase(m.role()));
+        if (hasSystem) {
+            return incoming;
+        }
+        List<ChatMessage> messages = new ArrayList<>(incoming.size() + 1);
+        messages.add(ChatMessage.system(SYSTEM_PROMPT));
+        messages.addAll(incoming);
+        return messages;
+    }
+}

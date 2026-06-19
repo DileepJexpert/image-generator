@@ -16,3 +16,8 @@ void downloadBytes(Uint8List bytes, String filename, String mime) {
   anchor.remove();
   html.Url.revokeObjectUrl(url);
 }
+
+/// Open [url] in a new browser tab (used to play a generated audio asset).
+void openUrl(String url) {
+  html.window.open(url, '_blank');
+}

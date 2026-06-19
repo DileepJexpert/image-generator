@@ -26,6 +26,12 @@ katixo:
   comfyui-url: ${COMFYUI_URL:http://localhost:8188}
   rembg-url: ${REMBG_URL:http://localhost:7000}
   esrgan-url: ${ESRGAN_URL:http://localhost:7001}
+  # Text-to-speech sidecar (Piper) for voiceover generation.
+  tts-url: ${TTS_URL:http://localhost:7002}
+  # Local LLM (Ollama) powering the Copilot. copilot-model is the default model
+  # used when a chat request doesn't name one; it must be pulled into Ollama.
+  ollama-url: ${OLLAMA_URL:http://localhost:11434}
+  copilot-model: ${COPILOT_MODEL:llama3.2}
   asset-storage-path: ${ASSET_STORAGE_PATH:/data/assets}
 
 server:
