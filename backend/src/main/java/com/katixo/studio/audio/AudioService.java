@@ -3,6 +3,7 @@ package com.katixo.studio.audio;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.katixo.studio.audio.AudioRequests.GenerateSpeechRequest;
+import com.katixo.studio.audio.AudioRequests.TranscribeRequest;
 import com.katixo.studio.job.Job;
 import com.katixo.studio.job.JobQueue;
 import com.katixo.studio.job.JobService;
@@ -27,6 +28,12 @@ public class AudioService {
 
     public UUID submitSpeech(GenerateSpeechRequest request) {
         Job job = jobService.create(JobType.TEXT_TO_SPEECH, toJson(request));
+        jobQueue.enqueue(job.getId());
+        return job.getId();
+    }
+
+    public UUID submitTranscribe(TranscribeRequest request) {
+        Job job = jobService.create(JobType.TRANSCRIBE, toJson(request));
         jobQueue.enqueue(job.getId());
         return job.getId();
     }

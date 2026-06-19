@@ -156,6 +156,14 @@ class ApiClient {
     return res.data!['jobId'] as String;
   }
 
+  /// Submits a transcription job for an existing audio asset; returns the job
+  /// id. The result is a `text` asset holding the transcript JSON.
+  Future<String> transcribe(String assetId) async {
+    final res = await _dio.post<Map<String, dynamic>>('/transcribe',
+        data: {'assetId': assetId});
+    return res.data!['jobId'] as String;
+  }
+
   // --- Copilot (local LLM chat) --------------------------------------------
 
   /// Sends the conversation so far to the Copilot and returns the assistant's

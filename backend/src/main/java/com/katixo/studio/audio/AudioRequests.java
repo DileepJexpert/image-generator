@@ -1,7 +1,10 @@
 package com.katixo.studio.audio;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+
+import java.util.UUID;
 
 /** Request payloads for the audio feature. */
 public final class AudioRequests {
@@ -16,6 +19,12 @@ public final class AudioRequests {
     public record GenerateSpeechRequest(
             @NotBlank @Size(max = 5000) String text,
             String voice
+    ) {
+    }
+
+    /** Transcribe an existing audio asset to text + timed segments (captions). */
+    public record TranscribeRequest(
+            @NotNull UUID assetId
     ) {
     }
 }

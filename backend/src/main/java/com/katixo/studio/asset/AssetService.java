@@ -95,6 +95,16 @@ public class AssetService {
         return repository.save(asset);
     }
 
+    /** Store a text result (e.g. a transcript JSON) as a {@code text} asset. */
+    @Transactional
+    public Asset saveText(byte[] bytes, String mime, UUID sourceJobId) {
+        UUID id = UUID.randomUUID();
+        String filename = id + extensionFor(mime, null);
+        String key = storage.store(bytes, filename);
+        Asset asset = new Asset(id, AssetType.TEXT, key, mime, null, null, sourceJobId);
+        return repository.save(asset);
+    }
+
     @Transactional(readOnly = true)
     public Optional<Asset> find(UUID id) {
         return repository.findById(id);
@@ -131,6 +141,8 @@ public class AssetService {
                     return ".wav";
                 case "audio/mpeg":
                     return ".mp3";
+                case "application/json":
+                    return ".json";
                 default:
                     break;
             }
