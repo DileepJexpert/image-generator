@@ -26,6 +26,7 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
   final _scroll = ScrollController();
   final List<_Turn> _turns = [];
   bool _sending = false;
+  String _streaming = ''; // assistant text accumulating during a stream
   String? _error;
 
   @override
@@ -44,6 +45,7 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
       _turns.add(_Turn('user', text));
       _input.clear();
       _sending = true;
+      _streaming = '';
       _error = null;
     });
     _scrollToEnd();
@@ -52,7 +54,14 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
       final history = [
         for (final t in _turns) {'role': t.role, 'content': t.content},
       ];
-      final reply = await ref.read(apiClientProvider).copilotChat(history);
+      final reply = await ref.read(apiClientProvider).copilotChatStream(
+        history,
+        onToken: (chunk) {
+          if (!mounted) return;
+          setState(() => _streaming += chunk);
+          _scrollToEnd();
+        },
+      );
       if (!mounted) return;
       setState(() => _turns.add(_Turn('assistant', reply)));
     } catch (e) {
@@ -60,7 +69,10 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
       setState(() => _error = _describe(e));
     } finally {
       if (mounted) {
-        setState(() => _sending = false);
+        setState(() {
+          _sending = false;
+          _streaming = '';
+        });
         _scrollToEnd();
       }
     }
@@ -118,12 +130,17 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
           Expanded(
             child: _turns.isEmpty
                 ? const _EmptyState()
-                : ListView.builder(
-                    controller: _scroll,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: _turns.length,
-                    itemBuilder: (context, i) => _Bubble(turn: _turns[i]),
-                  ),
+                : Builder(builder: (context) {
+                    final showStreaming = _sending && _streaming.isNotEmpty;
+                    return ListView.builder(
+                      controller: _scroll,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      itemCount: _turns.length + (showStreaming ? 1 : 0),
+                      itemBuilder: (context, i) => i < _turns.length
+                          ? _Bubble(turn: _turns[i])
+                          : _Bubble(turn: _Turn('assistant', _streaming)),
+                    );
+                  }),
           ),
           if (_error != null)
             Padding(
@@ -131,7 +148,7 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
               child: Text(_error!,
                   style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
             ),
-          if (_sending)
+          if (_sending && _streaming.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Row(

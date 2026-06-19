@@ -140,8 +140,9 @@ implementation time. VRAM tiers are rough guidance.
 - **Phase 3 — LLM Copilot + RAG.** Ollama sidecar; pgvector on Postgres; prompt
   enhancement, captions, chat, and the agent loop that calls our job APIs.
   *Started:* Ollama sidecar + a stateless Copilot chat API (`/api/v1/copilot/*`)
-  and an in-editor Copilot panel are in. *Next:* token streaming, pgvector RAG,
-  and the tool-driving agent loop.
+  with token streaming (`POST /copilot/chat/stream`, Server-Sent Events) and an
+  in-editor Copilot panel that renders the reply live. *Next:* pgvector RAG and
+  the tool-driving agent loop.
 - **Phase 4 — Advanced creative.** ControlNet, inpaint/outpaint, FLUX, lip-sync,
   music/SFX, face restore, relighting.
 - **Phase 5 — Pipelines & automation.** One-click templates (reel/photoshoot/

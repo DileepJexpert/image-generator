@@ -16,12 +16,14 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 /**
  * Talks to the local Ollama LLM sidecar (CLAUDE.md §3: a sidecar we only call
  * over HTTP, never author). Wraps Ollama's {@code /api/chat} and
- * {@code /api/tags}. Chat is non-streaming for now — interactive turns finish
- * in seconds on small models; token streaming is a follow-up.
+ * {@code /api/tags}, with both a buffered ({@link #chat}) and a token-streaming
+ * ({@link #chatStream}) variant.
  *
  * <p>Note on the async-job directive: heavy GPU <em>generation</em> always goes
  * through the job queue. The Copilot is an interactive request/response tool,
@@ -70,6 +72,52 @@ public class OllamaClient {
         }
         JsonNode json = objectMapper.readTree(response.body());
         return json.path("message").path("content").asText();
+    }
+
+    /**
+     * Runs a streaming chat completion, invoking {@code onToken} for each
+     * content chunk as Ollama emits it (NDJSON: one JSON object per line). The
+     * call blocks on the worker thread until the stream finishes.
+     */
+    public void chatStream(String model, List<ChatMessage> messages, Consumer<String> onToken)
+            throws IOException, InterruptedException {
+
+        ObjectNode body = objectMapper.createObjectNode();
+        body.put("model", model);
+        body.put("stream", true);
+        ArrayNode msgs = body.putArray("messages");
+        for (ChatMessage m : messages) {
+            ObjectNode node = msgs.addObject();
+            node.put("role", m.role());
+            node.put("content", m.content());
+        }
+
+        HttpRequest request = HttpRequest.newBuilder(URI.create(base() + "/api/chat"))
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofMinutes(5))
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
+                .build();
+
+        HttpResponse<Stream<String>> response =
+                httpClient.send(request, HttpResponse.BodyHandlers.ofLines());
+        if (response.statusCode() / 100 != 2) {
+            throw new IOException("Ollama /api/chat (stream) failed (" + response.statusCode() + ")");
+        }
+        try (Stream<String> lines = response.body()) {
+            for (String line : (Iterable<String>) lines::iterator) {
+                if (line.isBlank()) {
+                    continue;
+                }
+                JsonNode node = objectMapper.readTree(line);
+                String token = node.path("message").path("content").asText("");
+                if (!token.isEmpty()) {
+                    onToken.accept(token);
+                }
+                if (node.path("done").asBoolean(false)) {
+                    break;
+                }
+            }
+        }
     }
 
     /** Lists models pulled into the local Ollama instance. */
