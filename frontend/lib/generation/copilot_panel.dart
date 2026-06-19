@@ -209,8 +209,15 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
         if (event.isDone && event.resultAssetId != null) {
           final msg = await placeJobResultOnCanvas(ref,
               assetId: event.resultAssetId!, jobType: event.type);
-          if (msg != null) _toast(msg);
-          _endJob(jobId, socket, sub, finished: true);
+          // Only mark "added to canvas" when something visual was actually
+          // placed; non-visual results (e.g. leads JSON) just report ready.
+          if (msg != null) {
+            _toast(msg);
+            _endJob(jobId, socket, sub, finished: true);
+          } else {
+            _toast('$label ready');
+            _endJob(jobId, socket, sub);
+          }
         } else if (event.isFailed) {
           _toast('$label failed: ${event.error ?? ''}');
           _endJob(jobId, socket, sub);

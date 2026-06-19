@@ -15,8 +15,6 @@ import java.util.UUID;
 @Component
 public class GenerateImageTool implements CopilotTool {
 
-    /** Default SDXL checkpoint (matches the image panel's "SDXL Base" option). */
-    private static final String DEFAULT_MODEL = "sd_xl_base_1.0.safetensors";
     private static final int DEFAULT_SIZE = 1024;
 
     private final GenerationService generationService;
@@ -56,8 +54,11 @@ public class GenerateImageTool implements CopilotTool {
         int width = Args.clampedInt(args, "width", DEFAULT_SIZE, 64, 2048);
         int height = Args.clampedInt(args, "height", DEFAULT_SIZE, 64, 2048);
 
+        // Leave the model null so ImageGenerationHandler applies its default
+        // checkpoint (the documented SD 1.5 setup); forcing SDXL here would fail
+        // for users who only installed the default checkpoint.
         UUID jobId = generationService.submitImageJob(new GenerateImageRequest(
-                prompt, negative, width, height, DEFAULT_MODEL, null));
+                prompt, negative, width, height, null, null));
         return ToolResult.job("Started image generation (" + width + "x" + height
                 + ") for: \"" + prompt + "\".", jobId);
     }
