@@ -37,6 +37,19 @@ katixo:
   ollama-url: ${OLLAMA_URL:http://localhost:11434}
   copilot-model: ${COPILOT_MODEL:qwen3}
   asset-storage-path: ${ASSET_STORAGE_PATH:/data/assets}
+  # Shared single-GPU guard (see katixo-ai-platform). Serializes GPU work across this app AND
+  # katixo-docai so the one RTX 4060 is never used by both at once. Both apps MUST use lock-mode=
+  # postgres and the SAME lock-datasource (the shared "lock authority" DB) or nothing is serialized.
+  ai:
+    gpu:
+      lock-mode: ${GPU_LOCK_MODE:postgres}
+      acquire-timeout: 120s
+      poll-interval: 250ms
+      max-hold: 15m
+      lock-datasource:
+        url: ${GPU_LOCK_DB_URL:jdbc:postgresql://localhost:5432/katixo_gpu}
+        username: ${GPU_LOCK_DB_USER:katixo}
+        password: ${GPU_LOCK_DB_PASSWORD:katixo}
 
 server:
   # Unique port to avoid clashing with other local Spring Boot apps (8080).

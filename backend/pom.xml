@@ -36,6 +36,14 @@
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
 
+        <!-- Shared Katixo AI platform: GpuResourceGuard (one-GPU serialization across apps) +
+             SidecarClient base. Consumed from the local ~/.m2 (mvn install in katixo-ai-platform). -->
+        <dependency>
+            <groupId>com.katixo.ai</groupId>
+            <artifactId>katixo-ai-commons</artifactId>
+            <version>0.1.0</version>
+        </dependency>
+
         <!-- Persistence -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

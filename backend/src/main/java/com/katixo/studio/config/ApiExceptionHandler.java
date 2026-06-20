@@ -1,5 +1,6 @@
 package com.katixo.studio.config;
 
+import com.katixo.ai.commons.gpu.GpuBusyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -27,6 +28,16 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IOException.class)
     public ProblemDetail handleSidecarIo(IOException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
+    }
+
+    /**
+     * The shared GPU guard could not be acquired within the timeout — the other Katixo app (or
+     * another job) holds the single GPU. Surface 503 so the UI can say "GPU busy, retry shortly".
+     */
+    @ExceptionHandler(GpuBusyException.class)
+    public ProblemDetail handleGpuBusy(GpuBusyException ex) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                "The local GPU is busy with another job. Please retry shortly.");
     }
 
     @ExceptionHandler(InterruptedException.class)
