@@ -3,10 +3,14 @@ package com.katixo.studio.generation;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.katixo.ai.commons.gpu.GpuResourceGuard;
+import com.katixo.ai.commons.sidecar.SidecarClient;
+import com.katixo.ai.commons.sidecar.SidecarConfig;
+import com.katixo.ai.commons.sidecar.SidecarHealth;
+import com.katixo.studio.config.GpuCalls;
 import com.katixo.studio.config.KatixoProperties;
+import com.katixo.studio.config.Probes;
 import com.katixo.studio.media.MultipartBody;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -17,11 +21,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.function.IntConsumer;
 
@@ -31,11 +33,13 @@ import java.util.function.IntConsumer;
  * progress onto a callback, then fetches the produced image via
  * {@code /history} + {@code /view}. Node graph knowledge stays in the template;
  * Java only knows token names.
+ *
+ * <p>ComfyUI is the heaviest GPU consumer, so each generation is wrapped in the shared
+ * {@link GpuResourceGuard}: the lock is held for the whole render so this app and katixo-docai never
+ * use the single GPU at the same time. Extends the platform {@link SidecarClient} base.
  */
 @Component
-public class ComfyUiClient {
-
-    private static final Logger log = LoggerFactory.getLogger(ComfyUiClient.class);
+public class ComfyUiClient extends SidecarClient {
 
     private static final String WORKFLOW_TEXT2IMG =
             "com/katixo/studio/generation/workflows/text2img.json";
@@ -45,23 +49,27 @@ public class ComfyUiClient {
     private static final Duration COMPLETION_TIMEOUT = Duration.ofMinutes(10);
     private static final Duration POLL_INTERVAL = Duration.ofMillis(750);
 
-    private final KatixoProperties properties;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final GpuResourceGuard gpuGuard;
 
-    public ComfyUiClient(KatixoProperties properties, ObjectMapper objectMapper) {
-        this.properties = properties;
+    public ComfyUiClient(KatixoProperties properties, ObjectMapper objectMapper, GpuResourceGuard gpuGuard) {
+        super(properties.comfyuiUrl(), SidecarConfig.noRetry("comfyui",
+                Duration.ofSeconds(10), COMPLETION_TIMEOUT));
         this.objectMapper = objectMapper;
+        this.gpuGuard = gpuGuard;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
     }
 
-    /**
-     * Run the text-to-image workflow. {@code onProgress} receives 0..100 as
-     * ComfyUI reports sampling progress.
-     */
+    /** Text-to-image; holds the GPU guard for the whole render. */
     public ComfyImageResult generateImage(ImageGenerationParams params, IntConsumer onProgress)
+            throws IOException, InterruptedException {
+        return GpuCalls.guarded(gpuGuard, "image", () -> doGenerateImage(params, onProgress));
+    }
+
+    private ComfyImageResult doGenerateImage(ImageGenerationParams params, IntConsumer onProgress)
             throws IOException, InterruptedException {
 
         JsonNode graph = buildGraph(WORKFLOW_TEXT2IMG, Map.of(
@@ -73,7 +81,7 @@ public class ComfyUiClient {
                 "{{CKPT_NAME}}", params.checkpoint()
         ));
 
-        String clientId = UUID.randomUUID().toString();
+        String clientId = newIdempotencyKey();
         WebSocket progressSocket = openProgressSocket(clientId, onProgress);
         try {
             String promptId = submitPrompt(graph, clientId);
@@ -88,11 +96,13 @@ public class ComfyUiClient {
         }
     }
 
-    /**
-     * Run the image-to-video workflow. Uploads the source frame to ComfyUI,
-     * injects it into the LTX template, runs, and returns the encoded clip.
-     */
+    /** Image-to-video; holds the GPU guard for the whole render. */
     public ComfyVideoResult generateVideo(VideoGenerationParams params, IntConsumer onProgress)
+            throws IOException, InterruptedException {
+        return GpuCalls.guarded(gpuGuard, "image_to_video", () -> doGenerateVideo(params, onProgress));
+    }
+
+    private ComfyVideoResult doGenerateVideo(VideoGenerationParams params, IntConsumer onProgress)
             throws IOException, InterruptedException {
 
         String imageName = uploadImage(params.sourceImage(), "katixo_src.png");
@@ -108,7 +118,7 @@ public class ComfyUiClient {
                 "{{SEED}}", params.seed()
         ));
 
-        String clientId = UUID.randomUUID().toString();
+        String clientId = newIdempotencyKey();
         WebSocket progressSocket = openProgressSocket(clientId, onProgress);
         try {
             String promptId = submitPrompt(graph, clientId);
@@ -126,7 +136,7 @@ public class ComfyUiClient {
     /** Uploads an image to ComfyUI's input dir; returns the stored image name. */
     private String uploadImage(byte[] bytes, String filename) throws IOException, InterruptedException {
         MultipartBody body = new MultipartBody("image", filename, "image/png", bytes);
-        HttpRequest request = HttpRequest.newBuilder(URI.create(httpBase() + "/upload/image"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url("/upload/image")))
                 .header("Content-Type", body.contentType())
                 .POST(body.publisher())
                 .build();
@@ -140,8 +150,6 @@ public class ComfyUiClient {
         return subfolder.isBlank() ? name : subfolder + "/" + name;
     }
 
-    // --- template handling ---------------------------------------------------
-
     private JsonNode buildGraph(String resource, Map<String, Object> tokens) throws IOException {
         JsonNode template;
         try (var in = new ClassPathResource(resource).getInputStream()) {
@@ -151,7 +159,6 @@ public class ComfyUiClient {
         return template;
     }
 
-    /** Replace any string node whose text is a known token with the typed value. */
     private void substituteTokens(JsonNode node, Map<String, Object> tokens) {
         if (node.isObject()) {
             ObjectNode obj = (ObjectNode) node;
@@ -172,14 +179,12 @@ public class ComfyUiClient {
         }
     }
 
-    // --- ComfyUI HTTP / WS ---------------------------------------------------
-
     private String submitPrompt(JsonNode graph, String clientId) throws IOException, InterruptedException {
         ObjectNode body = objectMapper.createObjectNode();
         body.set("prompt", graph);
         body.put("client_id", clientId);
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(httpBase() + "/prompt"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url("/prompt")))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
                 .build();
@@ -203,17 +208,15 @@ public class ComfyUiClient {
                     .buildAsync(wsUri, new ProgressListener(onProgress))
                     .join();
         } catch (Exception e) {
-            // Progress streaming is best-effort; completion is detected via /history.
             log.warn("Could not open ComfyUI progress socket: {}", e.getMessage());
             return null;
         }
     }
 
-    /** Poll /history until the prompt has recorded outputs (source of truth for completion). */
     private JsonNode awaitOutputs(String promptId) throws IOException, InterruptedException {
         long deadline = System.nanoTime() + COMPLETION_TIMEOUT.toNanos();
         while (System.nanoTime() < deadline) {
-            HttpRequest request = HttpRequest.newBuilder(URI.create(httpBase() + "/history/" + promptId))
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url("/history/" + promptId)))
                     .GET()
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
@@ -234,12 +237,12 @@ public class ComfyUiClient {
             JsonNode images = nodeOutput.get("images");
             if (images != null && images.isArray() && !images.isEmpty()) {
                 JsonNode image = images.get(0);
-                String url = UriComponentsBuilder.fromHttpUrl(httpBase() + "/view")
+                String viewUrl = UriComponentsBuilder.fromHttpUrl(url("/view"))
                         .queryParam("filename", image.path("filename").asText())
                         .queryParam("subfolder", image.path("subfolder").asText(""))
                         .queryParam("type", image.path("type").asText("output"))
                         .toUriString();
-                HttpRequest request = HttpRequest.newBuilder(URI.create(url)).GET().build();
+                HttpRequest request = HttpRequest.newBuilder(URI.create(viewUrl)).GET().build();
                 HttpResponse<byte[]> response =
                         httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
                 if (response.statusCode() / 100 != 2) {
@@ -251,7 +254,6 @@ public class ComfyUiClient {
         throw new IOException("ComfyUI produced no images");
     }
 
-    /** Find the produced video: VHS_VideoCombine writes under "gifs"; fall back to "images". */
     private ComfyVideoResult fetchFirstVideo(JsonNode outputs) throws IOException, InterruptedException {
         for (JsonNode nodeOutput : outputs) {
             JsonNode media = nodeOutput.get("gifs");
@@ -260,12 +262,12 @@ public class ComfyUiClient {
             }
             if (media != null && media.isArray() && !media.isEmpty()) {
                 JsonNode item = media.get(0);
-                String url = UriComponentsBuilder.fromHttpUrl(httpBase() + "/view")
+                String viewUrl = UriComponentsBuilder.fromHttpUrl(url("/view"))
                         .queryParam("filename", item.path("filename").asText())
                         .queryParam("subfolder", item.path("subfolder").asText(""))
                         .queryParam("type", item.path("type").asText("output"))
                         .toUriString();
-                HttpRequest request = HttpRequest.newBuilder(URI.create(url)).GET().build();
+                HttpRequest request = HttpRequest.newBuilder(URI.create(viewUrl)).GET().build();
                 HttpResponse<byte[]> response =
                         httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
                 if (response.statusCode() / 100 != 2) {
@@ -279,12 +281,13 @@ public class ComfyUiClient {
         throw new IOException("ComfyUI produced no video");
     }
 
-    private String httpBase() {
-        return properties.comfyuiUrl().replaceAll("/+$", "");
+    private String wsBase() {
+        return baseUrl.replaceFirst("^http", "ws");
     }
 
-    private String wsBase() {
-        return httpBase().replaceFirst("^http", "ws");
+    @Override
+    public SidecarHealth probe() {
+        return Probes.reachable(httpClient, baseUrl, config.name());
     }
 
     /** Mirrors ComfyUI sampling progress onto the job callback. */
@@ -321,7 +324,7 @@ public class ComfyUiClient {
                     }
                 }
             } catch (Exception e) {
-                // Ignore non-JSON / unexpected frames; progress is best-effort.
+                // best-effort progress
             }
         }
     }

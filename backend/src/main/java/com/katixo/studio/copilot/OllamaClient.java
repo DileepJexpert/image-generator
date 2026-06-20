@@ -4,7 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.katixo.ai.commons.gpu.GpuResourceGuard;
+import com.katixo.ai.commons.sidecar.SidecarClient;
+import com.katixo.ai.commons.sidecar.SidecarConfig;
+import com.katixo.ai.commons.sidecar.SidecarHealth;
+import com.katixo.studio.config.GpuCalls;
 import com.katixo.studio.config.KatixoProperties;
+import com.katixo.studio.config.Probes;
 import com.katixo.studio.copilot.CopilotDtos.ModelSummary;
 import com.katixo.studio.copilot.agent.AssistantTurn;
 import com.katixo.studio.copilot.agent.AssistantTurn.ToolCall;
@@ -30,17 +36,24 @@ import java.util.stream.Stream;
  * <p>Note on the async-job directive: heavy GPU <em>generation</em> always goes
  * through the job queue. The Copilot is an interactive request/response tool,
  * so it answers inline like the other sidecar clients here.
+ *
+ * <p>Every {@code /api/chat} call is GPU work, so it runs through the shared
+ * {@link GpuResourceGuard} (so a copilot turn and a katixo-docai extraction can't hit the GPU at
+ * once). {@link #listModels} is metadata ({@code /api/tags}) and is not guarded. Extends the platform
+ * {@link SidecarClient} base.
  */
 @Component
-public class OllamaClient {
+public class OllamaClient extends SidecarClient {
 
-    private final KatixoProperties properties;
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
+    private final GpuResourceGuard gpuGuard;
 
-    public OllamaClient(KatixoProperties properties, ObjectMapper objectMapper) {
-        this.properties = properties;
+    public OllamaClient(KatixoProperties properties, ObjectMapper objectMapper, GpuResourceGuard gpuGuard) {
+        super(properties.ollamaUrl(), SidecarConfig.noRetry("ollama-copilot",
+                Duration.ofSeconds(10), Duration.ofMinutes(5)));
         this.objectMapper = objectMapper;
+        this.gpuGuard = gpuGuard;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -48,6 +61,11 @@ public class OllamaClient {
 
     /** Runs a chat completion and returns the assistant message content. */
     public String chat(String model, List<ChatMessage> messages)
+            throws IOException, InterruptedException {
+        return GpuCalls.guarded(gpuGuard, "copilot-chat", () -> doChat(model, messages));
+    }
+
+    private String doChat(String model, List<ChatMessage> messages)
             throws IOException, InterruptedException {
 
         ObjectNode body = objectMapper.createObjectNode();
@@ -60,7 +78,7 @@ public class OllamaClient {
             node.put("content", m.content());
         }
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(base() + "/api/chat"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url("/api/chat")))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofMinutes(5))
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
@@ -76,12 +94,16 @@ public class OllamaClient {
         return json.path("message").path("content").asText();
     }
 
-    /**
-     * Runs a streaming chat completion, invoking {@code onToken} for each
-     * content chunk as Ollama emits it (NDJSON: one JSON object per line). The
-     * call blocks on the worker thread until the stream finishes.
-     */
+    /** Streaming chat; the GPU guard is held for the whole stream. */
     public void chatStream(String model, List<ChatMessage> messages, Consumer<String> onToken)
+            throws IOException, InterruptedException {
+        GpuCalls.guarded(gpuGuard, "copilot-chat-stream", () -> {
+            doChatStream(model, messages, onToken);
+            return null;
+        });
+    }
+
+    private void doChatStream(String model, List<ChatMessage> messages, Consumer<String> onToken)
             throws IOException, InterruptedException {
 
         ObjectNode body = objectMapper.createObjectNode();
@@ -94,7 +116,7 @@ public class OllamaClient {
             node.put("content", m.content());
         }
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(base() + "/api/chat"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url("/api/chat")))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofMinutes(5))
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
@@ -122,17 +144,13 @@ public class OllamaClient {
         }
     }
 
-    /**
-     * Runs one buffered (non-streaming) tool-enabled chat turn. The model may
-     * answer with plain content or request one or more tool calls
-     * ({@code message.tool_calls}). Tool turns must be buffered — streaming +
-     * tool calls together is not yet reliable across Ollama models.
-     *
-     * @param messages pre-built conversation array (system/user/assistant/tool),
-     *                 owned and mutated by the agent loop
-     * @param tools    the tool specs the model may call
-     */
+    /** Tool-enabled chat turn (buffered). Guarded as a single GPU call. */
     public AssistantTurn chatWithTools(String model, ArrayNode messages, ArrayNode tools)
+            throws IOException, InterruptedException {
+        return GpuCalls.guarded(gpuGuard, "copilot-chat-tools", () -> doChatWithTools(model, messages, tools));
+    }
+
+    private AssistantTurn doChatWithTools(String model, ArrayNode messages, ArrayNode tools)
             throws IOException, InterruptedException {
 
         ObjectNode body = objectMapper.createObjectNode();
@@ -140,10 +158,9 @@ public class OllamaClient {
         body.put("stream", false);
         body.set("messages", messages);
         body.set("tools", tools);
-        // Tool selection is far more reliable at low temperature on local models.
         body.putObject("options").put("temperature", 0.1);
 
-        HttpRequest request = HttpRequest.newBuilder(URI.create(base() + "/api/chat"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url("/api/chat")))
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofMinutes(5))
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(body)))
@@ -170,10 +187,6 @@ public class OllamaClient {
         return new AssistantTurn(message, content, calls);
     }
 
-    /**
-     * Ollama usually returns tool-call arguments as a JSON object, but some
-     * models emit a JSON string; accept both so the agent gets a real node.
-     */
     private JsonNode parseArguments(JsonNode arguments) {
         if (arguments.isTextual()) {
             try {
@@ -187,9 +200,9 @@ public class OllamaClient {
                 : arguments;
     }
 
-    /** Lists models pulled into the local Ollama instance. */
+    /** Lists models pulled into the local Ollama instance. Metadata only — not a GPU call. */
     public List<ModelSummary> listModels() throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(URI.create(base() + "/api/tags"))
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url("/api/tags")))
                 .timeout(Duration.ofSeconds(15))
                 .GET()
                 .build();
@@ -208,7 +221,8 @@ public class OllamaClient {
         return models;
     }
 
-    private String base() {
-        return properties.ollamaUrl().replaceAll("/+$", "");
+    @Override
+    public SidecarHealth probe() {
+        return Probes.reachable(httpClient, baseUrl, config.name());
     }
 }
