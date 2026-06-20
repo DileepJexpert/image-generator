@@ -82,6 +82,15 @@
             <version>1.18.1</version>
         </dependency>
 
+        <!-- PlantUML (MIT-licensed build) renders system-design diagrams to PNG in-process — no
+             sidecar, no network. MIT keeps Studio distributable; the default GPL 'plantuml'
+             artifact is a drop-in swap with the same API. -->
+        <dependency>
+            <groupId>net.sourceforge.plantuml</groupId>
+            <artifactId>plantuml-mit</artifactId>
+            <version>1.2026.6</version>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
