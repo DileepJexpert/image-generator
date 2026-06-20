@@ -50,6 +50,14 @@ katixo:
         url: ${GPU_LOCK_DB_URL:jdbc:postgresql://localhost:5432/katixo_gpu}
         username: ${GPU_LOCK_DB_USER:katixo}
         password: ${GPU_LOCK_DB_PASSWORD:katixo}
+  # Copilot web_search tool. Optional: point at a self-hosted SearXNG for richer results;
+  # blank = scrape DuckDuckGo HTML (no API key, no paid service).
+  search:
+    searxng-url: ${SEARXNG_URL:}
+  # Copilot git_push tool (approval-gated). Absolute path of a git repo the agent may commit + push;
+  # blank = disabled. Studio only — never enable internet/push tools in katixo-docai.
+  git:
+    repo-dir: ${GIT_REPO_DIR:}
 
 server:
   # Unique port to avoid clashing with other local Spring Boot apps (8080).
