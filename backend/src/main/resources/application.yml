@@ -14,55 +14,84 @@ spring:
       hibernate:
         jdbc:
           time_zone: UTC
+          lob:
+            non_contextual_creation: true
   flyway:
     enabled: true
     locations: classpath:db/migration
   data:
     redis:
       url: ${REDIS_URL:redis://localhost:6379}
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
 
-# Internal sidecar URLs (used from Milestone 2 onward).
+server:
+  port: ${SERVER_PORT:8585}
+  error:
+    include-stacktrace: never   # never leak a stacktrace to the caller
+    include-message: always
+
+logging:
+  level:
+    com.katixo: INFO
+
+# ---------------------------------------------------------------------------
+# Katixo monolith config. Studio sidecars under katixo.*; doc-AI under katixo.ai.*.
+# ---------------------------------------------------------------------------
 katixo:
   comfyui-url: ${COMFYUI_URL:http://localhost:8188}
   rembg-url: ${REMBG_URL:http://localhost:7000}
   esrgan-url: ${ESRGAN_URL:http://localhost:7001}
-  # Text-to-speech sidecar (Piper) for voiceover generation.
   tts-url: ${TTS_URL:http://localhost:7002}
-  # Speech-to-text sidecar (faster-whisper) for transcription / captions.
   whisper-url: ${WHISPER_URL:http://localhost:7003}
-  # Local LLM (Ollama) powering the Copilot. copilot-model is the default model
-  # used when a request doesn't name one; it must be pulled into Ollama. Default
-  # is qwen3 (8B): a tool-capable, free model that fits a 12GB GPU and drives the
-  # agent loop far more reliably than smaller models (e.g. llama3.2 3B).
   ollama-url: ${OLLAMA_URL:http://localhost:11434}
   copilot-model: ${COPILOT_MODEL:qwen3}
   asset-storage-path: ${ASSET_STORAGE_PATH:/data/assets}
-  # Shared single-GPU guard (see katixo-ai-platform). Serializes GPU work across this app AND
-  # katixo-docai so the one RTX 4060 is never used by both at once. Both apps MUST use lock-mode=
-  # postgres and the SAME lock-datasource (the shared "lock authority" DB) or nothing is serialized.
-  ai:
-    gpu:
-      lock-mode: ${GPU_LOCK_MODE:postgres}
-      acquire-timeout: 120s
-      poll-interval: 250ms
-      max-hold: 15m
-      lock-datasource:
-        url: ${GPU_LOCK_DB_URL:jdbc:postgresql://localhost:5432/katixo_gpu}
-        username: ${GPU_LOCK_DB_USER:katixo}
-        password: ${GPU_LOCK_DB_PASSWORD:katixo}
-  # Copilot web_search tool. Optional: point at a self-hosted SearXNG for richer results;
-  # blank = scrape DuckDuckGo HTML (no API key, no paid service).
+
+  # Copilot web_search tool. Optional SearXNG for richer results; blank = scrape DuckDuckGo (no key).
   search:
     searxng-url: ${SEARXNG_URL:}
   # Copilot git_push tool (approval-gated). Absolute path of a git repo the agent may commit + push;
-  # blank = disabled. Studio only — never enable internet/push tools in katixo-docai.
+  # blank = disabled.
   git:
     repo-dir: ${GIT_REPO_DIR:}
 
-server:
-  # Unique port to avoid clashing with other local Spring Boot apps (8080).
-  # Override with SERVER_PORT if needed.
-  port: ${SERVER_PORT:8585}
+  ai:
+    # Single-GPU guard. One process now, so an in-process lock is enough — no Postgres advisory lock.
+    gpu:
+      lock-mode: ${GPU_LOCK_MODE:in-process}
+      acquire-timeout: 120s
+      poll-interval: 250ms
+      max-hold: 15m
+    # Doc-AI: invoice / GRN / bill extraction + reconciliation. All inference is LOCAL (Ollama + OCR).
+    privacy:
+      # Refuse to start if any AI endpoint is not localhost — the offline guarantee.
+      enforce-localhost: true
+    ollama:
+      base-url: ${OLLAMA_URL:http://localhost:11434}
+      text-model: ${OLLAMA_TEXT_MODEL:qwen2.5:7b-instruct}
+      vision-model: ${OLLAMA_VISION_MODEL:minicpm-v}
+      temperature: 0.0
+      seed: 42
+      keep-alive: 5m
+      timeout-seconds: 120
+      format: json
+    ocr:
+      base-url: ${OCR_URL:http://localhost:8000}
+      threshold: 0.75
+      timeout-seconds: 60
+    preprocess:
+      pdf-dpi: 300
+      max-edge-px: 2200
+      deskew-max-angle-deg: 10.0
+    review:
+      threshold: 0.80
+    prompts:
+      version: v1
+    eval:
+      golden-dir: eval/golden
 
 management:
   endpoints:

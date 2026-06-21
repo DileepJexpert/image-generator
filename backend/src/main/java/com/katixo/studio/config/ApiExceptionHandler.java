@@ -1,6 +1,5 @@
 package com.katixo.studio.config;
 
-import com.katixo.ai.commons.gpu.GpuBusyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -9,35 +8,21 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import java.io.IOException;
 
 /**
- * Maps invalid-argument failures (e.g. bad upscale scale) to 400 instead of the
- * default 500. Bean-validation failures are already handled by Spring as 400.
+ * Studio request-thread failures. Now that the doc-AI pipeline lives in the same app, its
+ * {@code GlobalExceptionHandler} owns the broader cases (IllegalArgumentException, GpuBusyException,
+ * BadInput, validation, and the generic fallback); this advice only adds the two studio-specific
+ * checked exceptions, which are more specific so they still win.
  */
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
-    }
-
     /**
-     * A sidecar call made on the request thread (e.g. the Copilot's Ollama call)
-     * failed — surface 502 instead of a generic 500 so the UI can say "the model
-     * service is unreachable".
+     * A sidecar call made on the request thread (e.g. the Copilot's Ollama call) failed — surface
+     * 502 instead of a generic 500 so the UI can say "the model service is unreachable".
      */
     @ExceptionHandler(IOException.class)
     public ProblemDetail handleSidecarIo(IOException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, ex.getMessage());
-    }
-
-    /**
-     * The shared GPU guard could not be acquired within the timeout — the other Katixo app (or
-     * another job) holds the single GPU. Surface 503 so the UI can say "GPU busy, retry shortly".
-     */
-    @ExceptionHandler(GpuBusyException.class)
-    public ProblemDetail handleGpuBusy(GpuBusyException ex) {
-        return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
-                "The local GPU is busy with another job. Please retry shortly.");
     }
 
     @ExceptionHandler(InterruptedException.class)
