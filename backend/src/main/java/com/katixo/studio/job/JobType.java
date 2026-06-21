@@ -6,6 +6,7 @@ public enum JobType {
     IMAGE_TO_VIDEO("image_to_video"),
     REMOVE_BG("remove_bg"),
     UPSCALE("upscale"),
+    DIAGRAM("diagram"),
     TEXT_TO_SPEECH("text_to_speech"),
     TRANSCRIBE("transcribe"),
     LEAD_SCRAPE("lead_scrape");

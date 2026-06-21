@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -19,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * each job to the {@link JobHandler} registered for its type.
  */
 @Component
+@ConditionalOnProperty(name = "katixo.jobs.worker-enabled", havingValue = "true", matchIfMissing = true)
 public class JobWorker {
 
     private static final Logger log = LoggerFactory.getLogger(JobWorker.class);

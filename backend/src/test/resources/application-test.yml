@@ -1,0 +1,29 @@
+# Test profile for the merged monolith. Overrides only the infrastructure so the full Spring
+# context (Studio + doc-AI) boots with no Postgres, no Redis, no Docker:
+#   - H2 in-memory DB (PostgreSQL compatibility mode) instead of Postgres
+#   - Hibernate create-drop builds the schema from the entities (Flyway is Postgres-only, so off)
+#   - the Redis-backed JobWorker is disabled (nothing to dequeue in a test)
+#   - asset storage points at a temp dir (LocalAssetStorage mkdirs there on startup)
+# Everything else (model names, thresholds, in-process GPU guard, localhost privacy) comes from the
+# main application.yml; OfflineEndToEndTest further overrides the ollama/ocr base-urls to its stub.
+spring:
+  datasource:
+    url: jdbc:h2:mem:katixo;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      # No Postgres here, so let Hibernate build the schema from the entities for the test only.
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+  flyway:
+    # The migrations are Postgres-syntax (jsonb, TIMESTAMPTZ); don't run them against H2.
+    enabled: false
+
+katixo:
+  # No GPU/Redis worker in tests — keep the background thread from spinning on an absent Redis.
+  jobs:
+    worker-enabled: false
+  # LocalAssetStorage creates this directory on startup; keep it inside the build's temp space.
+  asset-storage-path: ${java.io.tmpdir}/katixo-test-assets
