@@ -13,6 +13,7 @@ public record KatixoProperties(
         String esrganUrl,
         String ttsUrl,
         String whisperUrl,
+        String ffmpegUrl,
         String ollamaUrl,
         String copilotModel,
         String assetStoragePath

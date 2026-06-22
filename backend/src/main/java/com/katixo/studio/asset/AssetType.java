@@ -5,7 +5,8 @@ public enum AssetType {
     IMAGE("image"),
     VIDEO("video"),
     AUDIO("audio"),
-    TEXT("text");
+    TEXT("text"),
+    DOCUMENT("document");
 
     private final String value;
 
