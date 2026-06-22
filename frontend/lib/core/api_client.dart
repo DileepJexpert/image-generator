@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart' show kDebugMode, kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../editor/model/project.dart';
@@ -29,6 +29,40 @@ String get kApiOrigin {
 
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
 
+/// Logs every backend call to the console in debug builds — method, URL, status
+/// and elapsed time — so you can trace what the app called and how the backend
+/// responded. On Flutter Web these lines appear in the browser DevTools console.
+class _ApiLogInterceptor extends Interceptor {
+  static const _startKey = 'katixo.startMs';
+
+  @override
+  void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
+    options.extra[_startKey] = DateTime.now().millisecondsSinceEpoch;
+    debugPrint('[api] → ${options.method} ${options.uri}');
+    handler.next(options);
+  }
+
+  @override
+  void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
+    debugPrint('[api] ← ${response.statusCode} ${response.requestOptions.method} '
+        '${response.requestOptions.uri} (${_elapsedMs(response.requestOptions)} ms)');
+    handler.next(response);
+  }
+
+  @override
+  void onError(DioException err, ErrorInterceptorHandler handler) {
+    debugPrint('[api] ✗ ${err.response?.statusCode ?? '-'} '
+        '${err.requestOptions.method} ${err.requestOptions.uri} '
+        '(${_elapsedMs(err.requestOptions)} ms): ${err.type.name} ${err.message ?? ''}');
+    handler.next(err);
+  }
+
+  int _elapsedMs(RequestOptions options) {
+    final start = options.extra[_startKey];
+    return start is int ? DateTime.now().millisecondsSinceEpoch - start : -1;
+  }
+}
+
 /// Thin wrapper over the internal REST API (projects + assets + generation).
 class ApiClient {
   ApiClient({Dio? dio})
@@ -37,7 +71,12 @@ class ApiClient {
               baseUrl: '$kApiOrigin$kApiBase',
               connectTimeout: const Duration(seconds: 15),
               receiveTimeout: const Duration(seconds: 60),
-            ));
+            )) {
+    // Trace every backend call in the browser console during development.
+    if (kDebugMode) {
+      _dio.interceptors.add(_ApiLogInterceptor());
+    }
+  }
 
   final Dio _dio;
 

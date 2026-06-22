@@ -14,6 +14,8 @@ import com.katixo.studio.config.Probes;
 import com.katixo.studio.copilot.CopilotDtos.ModelSummary;
 import com.katixo.studio.copilot.agent.AssistantTurn;
 import com.katixo.studio.copilot.agent.AssistantTurn.ToolCall;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -45,6 +47,8 @@ import java.util.stream.Stream;
 @Component
 public class OllamaClient extends SidecarClient {
 
+    private static final Logger log = LoggerFactory.getLogger(OllamaClient.class);
+
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final GpuResourceGuard gpuGuard;
@@ -62,7 +66,11 @@ public class OllamaClient extends SidecarClient {
     /** Runs a chat completion and returns the assistant message content. */
     public String chat(String model, List<ChatMessage> messages)
             throws IOException, InterruptedException {
-        return GpuCalls.guarded(gpuGuard, "copilot-chat", () -> doChat(model, messages));
+        log.info("Copilot chat -> Ollama model={} url={} messages={}", model, baseUrl, messages.size());
+        long t0 = System.nanoTime();
+        String reply = GpuCalls.guarded(gpuGuard, "copilot-chat", () -> doChat(model, messages));
+        log.info("Copilot chat <- Ollama model={} {} ms replyChars={}", model, msSince(t0), reply.length());
+        return reply;
     }
 
     private String doChat(String model, List<ChatMessage> messages)
@@ -97,10 +105,17 @@ public class OllamaClient extends SidecarClient {
     /** Streaming chat; the GPU guard is held for the whole stream. */
     public void chatStream(String model, List<ChatMessage> messages, Consumer<String> onToken)
             throws IOException, InterruptedException {
+        log.info("Copilot chat-stream -> Ollama model={} url={} messages={}", model, baseUrl, messages.size());
+        long t0 = System.nanoTime();
+        int[] tokens = {0};
         GpuCalls.guarded(gpuGuard, "copilot-chat-stream", () -> {
-            doChatStream(model, messages, onToken);
+            doChatStream(model, messages, token -> {
+                tokens[0]++;
+                onToken.accept(token);
+            });
             return null;
         });
+        log.info("Copilot chat-stream <- Ollama model={} {} ms tokens={}", model, msSince(t0), tokens[0]);
     }
 
     private void doChatStream(String model, List<ChatMessage> messages, Consumer<String> onToken)
@@ -147,7 +162,14 @@ public class OllamaClient extends SidecarClient {
     /** Tool-enabled chat turn (buffered). Guarded as a single GPU call. */
     public AssistantTurn chatWithTools(String model, ArrayNode messages, ArrayNode tools)
             throws IOException, InterruptedException {
-        return GpuCalls.guarded(gpuGuard, "copilot-chat-tools", () -> doChatWithTools(model, messages, tools));
+        log.info("Copilot agent-turn -> Ollama model={} url={} messages={} tools={}",
+                model, baseUrl, messages.size(), tools.size());
+        long t0 = System.nanoTime();
+        AssistantTurn turn = GpuCalls.guarded(gpuGuard, "copilot-chat-tools",
+                () -> doChatWithTools(model, messages, tools));
+        log.info("Copilot agent-turn <- Ollama model={} {} ms toolCalls={}",
+                model, msSince(t0), turn.toolCalls().size());
+        return turn;
     }
 
     private AssistantTurn doChatWithTools(String model, ArrayNode messages, ArrayNode tools)
@@ -198,6 +220,10 @@ public class OllamaClient extends SidecarClient {
         return arguments.isMissingNode() || arguments.isNull()
                 ? objectMapper.createObjectNode()
                 : arguments;
+    }
+
+    private static long msSince(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000;
     }
 
     /** Lists models pulled into the local Ollama instance. Metadata only — not a GPU call. */

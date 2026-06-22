@@ -2,6 +2,7 @@ package com.katixo.studio.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
@@ -17,5 +18,11 @@ public class WebConfig implements WebMvcConfigurer {
                 .allowedOriginPatterns("*")
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*");
+    }
+
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        // Access log for every internal-API call (method, path, status, latency).
+        registry.addInterceptor(new RequestLogInterceptor()).addPathPatterns("/api/**");
     }
 }
