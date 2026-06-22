@@ -6,11 +6,12 @@
 #
 # Services: postgres, redis, comfyui (GPU), rembg (CPU), esrgan (GPU),
 # tts (CPU/Piper), whisper (CPU/faster-whisper), ffmpeg (CPU/video assembly),
-# ollama (CPU/Copilot LLM), backend (Spring Boot monolith), frontend (Flutter Web).
+# ocr (CPU/PaddleOCR — doc-AI extraction), ollama (CPU/Copilot LLM),
+# backend (Spring Boot monolith), frontend (Flutter Web).
 #
 # comfyui + esrgan require the host to have nvidia-container-toolkit. On a
 # machine without an NVIDIA GPU, bring up the always-runnable subset:
-#   docker compose up postgres redis rembg tts whisper ffmpeg ollama backend frontend
+#   docker compose up postgres redis rembg tts whisper ffmpeg ocr ollama backend frontend
 
 services:
   postgres:
@@ -108,6 +109,15 @@ services:
     ports:
       - "7004:7004"
 
+  # PaddleOCR text-extraction sidecar for the merged doc-AI extraction pipeline
+  # (com.katixo.ai.*). CPU-only — part of the always-runnable subset. Bakes the
+  # detection/recognition/angle models into the image so it runs fully offline.
+  ocr:
+    build:
+      context: ../media/ocr
+    ports:
+      - "8000:8000"
+
   # Local LLM for the Copilot (VISION.md Phase 3). Runs CPU-only by default so
   # it's part of the always-runnable subset (works on a laptop without an NVIDIA
   # GPU). For GPU acceleration on the workstation, add a deploy.resources.
@@ -144,6 +154,8 @@ services:
         condition: service_started
       ffmpeg:
         condition: service_started
+      ocr:
+        condition: service_started
       ollama:
         condition: service_started
     environment:
@@ -159,6 +171,7 @@ services:
       TTS_URL: http://tts:7002
       WHISPER_URL: http://whisper:7003
       FFMPEG_URL: http://ffmpeg:7004
+      OCR_URL: http://ocr:8000
       # Copilot LLM (VISION.md Phase 3).
       OLLAMA_URL: http://ollama:11434
       COPILOT_MODEL: qwen3
