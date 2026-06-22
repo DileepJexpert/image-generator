@@ -7,6 +7,7 @@ public enum JobType {
     REMOVE_BG("remove_bg"),
     UPSCALE("upscale"),
     DIAGRAM("diagram"),
+    LESSON("lesson"),
     TEXT_TO_SPEECH("text_to_speech"),
     TRANSCRIBE("transcribe"),
     LEAD_SCRAPE("lead_scrape");
