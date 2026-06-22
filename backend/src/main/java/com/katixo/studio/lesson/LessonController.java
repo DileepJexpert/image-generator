@@ -9,8 +9,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Lesson generation endpoint. Returns a {@code {jobId}} immediately; poll {@code GET /api/v1/jobs/{id}}
- * (or the job WebSocket) for progress, then download the lesson JSON from
- * {@code GET /api/v1/assets/{resultAssetId}}.
+ * (or the job WebSocket) for progress. When done, {@code resultAssetId} points at a
+ * {@link LessonBundle} manifest (JSON): download it from {@code GET /api/v1/assets/{id}}, then fetch
+ * the referenced lesson JSON, section images, and PDF worksheet the same way.
  */
 @RestController
 @RequestMapping("/api/v1/generate")
