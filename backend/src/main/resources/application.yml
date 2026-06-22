@@ -46,6 +46,7 @@ katixo:
   esrgan-url: ${ESRGAN_URL:http://localhost:7001}
   tts-url: ${TTS_URL:http://localhost:7002}
   whisper-url: ${WHISPER_URL:http://localhost:7003}
+  ffmpeg-url: ${FFMPEG_URL:http://localhost:7004}
   ollama-url: ${OLLAMA_URL:http://localhost:11434}
   copilot-model: ${COPILOT_MODEL:qwen3}
   asset-storage-path: ${ASSET_STORAGE_PATH:/data/assets}

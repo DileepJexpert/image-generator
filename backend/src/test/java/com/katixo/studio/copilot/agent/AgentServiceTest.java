@@ -32,7 +32,7 @@ class AgentServiceTest {
     private AgentService serviceWith(OllamaClient ollama, CopilotTool tool) {
         ToolRegistry registry = new ToolRegistry(List.of(tool), mapper);
         KatixoProperties props = new KatixoProperties(
-                null, null, null, null, null, null, "test-model", null);
+                null, null, null, null, null, null, null, "test-model", null);
         return new AgentService(ollama, registry, props, mapper);
     }
 

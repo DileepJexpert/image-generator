@@ -12,12 +12,15 @@ import java.util.UUID;
  * @param imageAssetIds per-section illustration PNGs (best-effort; may be fewer than the section
  *                      count if ComfyUI was unavailable for some sections)
  * @param pdfAssetId    the illustrated PDF worksheet
+ * @param videoAssetId  the narrated slideshow MP4, or {@code null} if the TTS/ffmpeg step was
+ *                      unavailable (the rest of the bundle is still produced)
  */
 public record LessonBundle(
         String title,
         int grade,
         UUID lessonAssetId,
         List<UUID> imageAssetIds,
-        UUID pdfAssetId
+        UUID pdfAssetId,
+        UUID videoAssetId
 ) {
 }
