@@ -36,6 +36,11 @@ server:
 logging:
   level:
     com.katixo: INFO
+    # Access log for every /api/** call (method, path, status, latency).
+    katixo.http: INFO
+    # Show the single-GPU guard acquiring/releasing the lock, so you can see exactly
+    # when a request engages the local GPU (Copilot LLM, ComfyUI, rembg, esrgan, whisper).
+    com.katixo.ai.commons.gpu: DEBUG
 
 # ---------------------------------------------------------------------------
 # Katixo monolith config. Studio sidecars under katixo.*; doc-AI under katixo.ai.*.
