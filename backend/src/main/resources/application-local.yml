@@ -1,0 +1,41 @@
+# ---------------------------------------------------------------------------
+# application-local.yml  —  LOCAL DEV profile
+#
+# Use this when you run the backend DIRECTLY on your machine (IDE / Maven, not in
+# a container) against your natively-installed Ollama (the Windows/macOS
+# installer, listening on localhost:11434). Activate the profile with ONE of:
+#
+#   mvn spring-boot:run -Dspring-boot.run.profiles=local
+#   PowerShell:  $env:SPRING_PROFILES_ACTIVE="local";  mvn spring-boot:run
+#   IntelliJ:    Run config → Active profiles → local
+#
+# It overrides ONLY the Ollama endpoint + model NAMES so they match models you
+# actually have (check with `ollama list`). The default application.yml stays
+# env-driven (${OLLAMA_URL}, ${COPILOT_MODEL}, ${OLLAMA_TEXT_MODEL}, ...), so a
+# deployed / containerised run keeps taking its endpoint + model from the
+# environment. This file is read ONLY when the `local` profile is active.
+#
+# NOTE: this assumes the backend runs on the host, so `localhost` reaches your
+# native Ollama. If you run the BACKEND itself inside Docker, do NOT use this
+# profile — instead set OLLAMA_URL=http://host.docker.internal:11434 in the
+# container's environment (host.docker.internal = your host from a container).
+# ---------------------------------------------------------------------------
+katixo:
+  # --- Copilot LLM ---
+  # qwen2.5-coder:7b is tool-capable (verified: `ollama show qwen2.5-coder:7b`
+  # lists `tools` under Capabilities), so it can drive the Copilot's Agent mode.
+  # Swap to qwen2.5-coder:14b if your GPU has the VRAM headroom.
+  ollama-url: http://localhost:11434
+  copilot-model: qwen2.5-coder:7b
+
+  ai:
+    # --- Doc-AI / lesson extraction pipeline (same local Ollama) ---
+    ollama:
+      base-url: http://localhost:11434
+      # Default qwen2.5:7b-instruct isn't installed; point at a model you have.
+      text-model: qwen2.5-coder:7b
+      # You currently have no local *vision* model, so the rare VLM fallback
+      # (default `minicpm-v`) can't run locally — the OCR-first text path above
+      # doesn't need it. Pull one only if you want that path:
+      #   ollama pull minicpm-v
+      # vision-model: minicpm-v
