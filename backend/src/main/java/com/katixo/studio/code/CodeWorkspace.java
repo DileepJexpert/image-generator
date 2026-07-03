@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 /**
@@ -32,6 +34,8 @@ public class CodeWorkspace {
     private static final int DEFAULT_MAX_FILE_BYTES = 250_000;
     private static final int DEFAULT_COMMAND_TIMEOUT_SECONDS = 180;
     private static final int OUTPUT_LIMIT = 16_000;
+    private static final int DIFF_CONTEXT_LINES = 3;
+    private static final int DIFF_CHANGED_LINE_LIMIT = 160;
 
     private static final Set<String> SEARCH_SKIPPED_DIRS = Set.of(
             ".git", ".gradle", ".dart_tool", ".idea", ".vscode", "build", "target",
@@ -140,22 +144,7 @@ public class CodeWorkspace {
 
     public String applyPatch(List<PatchOperation> operations) throws IOException {
         requireConfigured();
-        if (operations == null || operations.isEmpty()) {
-            throw new IllegalArgumentException("Patch must contain at least one operation");
-        }
-        if (operations.size() > 20) {
-            throw new IllegalArgumentException("Patch can touch at most 20 files");
-        }
-
-        Set<String> seenPaths = new HashSet<>();
-        List<PendingWrite> writes = new ArrayList<>();
-        for (PatchOperation op : operations) {
-            PendingWrite write = preparePatchOperation(op);
-            if (!seenPaths.add(relative(write.path()))) {
-                throw new IllegalArgumentException("Patch contains duplicate path: " + relative(write.path()));
-            }
-            writes.add(write);
-        }
+        List<PendingWrite> writes = preparePatch(operations);
 
         List<PendingWrite> applied = new ArrayList<>();
         try {
@@ -173,7 +162,27 @@ public class CodeWorkspace {
                 + writes.stream().map(w -> relative(w.path())).toList();
     }
 
+    public String previewPatch(List<PatchOperation> operations) throws IOException {
+        requireConfigured();
+        List<PendingWrite> writes = preparePatch(operations);
+        StringBuilder out = new StringBuilder();
+        out.append("Patch preview: ").append(writes.size()).append(" file(s)\n");
+        for (PendingWrite write : writes) {
+            appendDiff(out, write);
+            if (out.length() >= OUTPUT_LIMIT) {
+                break;
+            }
+        }
+        return capped(out.toString());
+    }
+
     public String runCommand(String command, String directory) throws IOException, InterruptedException {
+        CommandResult result = runCommand(command, directory, line -> { });
+        return "$ " + result.command() + "\nexit=" + result.exitCode() + "\n" + result.output();
+    }
+
+    public CommandResult runCommand(String command, String directory, Consumer<String> onLine)
+            throws IOException, InterruptedException {
         requireConfigured();
         String cmd = requireSafeCommand(command);
         Path workingDir = directory == null || directory.isBlank() ? root() : resolve(directory);
@@ -191,21 +200,54 @@ public class CodeWorkspace {
                 .start();
 
         StringBuilder out = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (out.length() < OUTPUT_LIMIT) {
-                    out.append(line).append('\n');
+        AtomicReference<Exception> readerError = new AtomicReference<>();
+        Thread readerThread = new Thread(() -> {
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    try {
+                        onLine.accept(line);
+                    } catch (RuntimeException e) {
+                        readerError.set(e);
+                    }
+                    if (out.length() < OUTPUT_LIMIT) {
+                        out.append(line).append('\n');
+                    }
                 }
+            } catch (IOException e) {
+                readerError.set(e);
             }
-        }
+        }, "katixo-code-command-reader");
+        readerThread.setDaemon(true);
+        readerThread.start();
+
         if (!process.waitFor(commandTimeout.toSeconds(), TimeUnit.SECONDS)) {
             process.destroyForcibly();
+            readerThread.join(TimeUnit.SECONDS.toMillis(2));
             throw new IOException("Command timed out after " + commandTimeout.toSeconds() + "s");
         }
-        String header = "$ " + cmd + "\nexit=" + process.exitValue() + "\n";
-        return capped(header + out);
+        readerThread.join(TimeUnit.SECONDS.toMillis(2));
+        Exception error = readerError.get();
+        if (error instanceof IOException io) {
+            throw io;
+        }
+        if (error instanceof RuntimeException re) {
+            throw re;
+        }
+        return new CommandResult(cmd, process.exitValue(), capped(out.toString()));
+    }
+
+    public CommandResult runCommandForJob(String command, String directory, Consumer<String> onLine)
+            throws IOException, InterruptedException {
+        Consumer<String> cappedLine = line -> {
+            String clean = line.length() <= 1_000 ? line : line.substring(0, 1_000) + "...";
+            onLine.accept(clean);
+        };
+        cappedLine.accept("$ " + (command == null ? "" : command.trim()));
+        CommandResult result = runCommand(command, directory, cappedLine);
+        cappedLine.accept("exit=" + result.exitCode());
+        return result;
     }
 
     private void addMatches(Path file, String rel, String needle, List<String> matches, int limit)
@@ -224,6 +266,26 @@ public class CodeWorkspace {
                 }
             }
         }
+    }
+
+    private List<PendingWrite> preparePatch(List<PatchOperation> operations) throws IOException {
+        if (operations == null || operations.isEmpty()) {
+            throw new IllegalArgumentException("Patch must contain at least one operation");
+        }
+        if (operations.size() > 20) {
+            throw new IllegalArgumentException("Patch can touch at most 20 files");
+        }
+
+        Set<String> seenPaths = new HashSet<>();
+        List<PendingWrite> writes = new ArrayList<>();
+        for (PatchOperation op : operations) {
+            PendingWrite write = preparePatchOperation(op);
+            if (!seenPaths.add(relative(write.path()))) {
+                throw new IllegalArgumentException("Patch contains duplicate path: " + relative(write.path()));
+            }
+            writes.add(write);
+        }
+        return writes;
     }
 
     private PendingWrite preparePatchOperation(PatchOperation op) throws IOException {
@@ -277,6 +339,89 @@ public class CodeWorkspace {
             idx += needle.length();
         }
         return count;
+    }
+
+    private void appendDiff(StringBuilder out, PendingWrite write) {
+        String path = relative(write.path());
+        out.append("\ndiff -- ").append(path).append('\n');
+        if (write.oldContent() == null) {
+            out.append("--- /dev/null\n");
+            out.append("+++ b/").append(path).append('\n');
+            appendAddedLines(out, splitLines(write.newContent()));
+            return;
+        }
+        if (write.oldContent().equals(write.newContent())) {
+            out.append("(no changes)\n");
+            return;
+        }
+
+        String[] oldLines = splitLines(write.oldContent());
+        String[] newLines = splitLines(write.newContent());
+        int prefix = commonPrefix(oldLines, newLines);
+        int suffix = commonSuffix(oldLines, newLines, prefix);
+        int oldChangeEnd = oldLines.length - suffix;
+        int newChangeEnd = newLines.length - suffix;
+        int contextStart = Math.max(0, prefix - DIFF_CONTEXT_LINES);
+        int oldContextEnd = Math.min(oldLines.length, oldChangeEnd + DIFF_CONTEXT_LINES);
+        int newContextEnd = Math.min(newLines.length, newChangeEnd + DIFF_CONTEXT_LINES);
+
+        out.append("--- a/").append(path).append('\n');
+        out.append("+++ b/").append(path).append('\n');
+        out.append("@@ -").append(contextStart + 1).append(',').append(oldContextEnd - contextStart)
+                .append(" +").append(contextStart + 1).append(',').append(newContextEnd - contextStart)
+                .append(" @@\n");
+        for (int i = contextStart; i < prefix; i++) {
+            out.append(' ').append(oldLines[i]).append('\n');
+        }
+        appendChangedLines(out, '-', oldLines, prefix, oldChangeEnd);
+        appendChangedLines(out, '+', newLines, prefix, newChangeEnd);
+        for (int i = newChangeEnd; i < newContextEnd; i++) {
+            out.append(' ').append(newLines[i]).append('\n');
+        }
+    }
+
+    private void appendAddedLines(StringBuilder out, String[] lines) {
+        int limit = Math.min(lines.length, DIFF_CHANGED_LINE_LIMIT);
+        for (int i = 0; i < limit; i++) {
+            out.append('+').append(lines[i]).append('\n');
+        }
+        if (lines.length > limit) {
+            out.append("+... ").append(lines.length - limit).append(" more line(s)\n");
+        }
+    }
+
+    private void appendChangedLines(StringBuilder out, char prefix, String[] lines, int start, int end) {
+        int count = end - start;
+        int limit = Math.min(count, DIFF_CHANGED_LINE_LIMIT);
+        for (int i = 0; i < limit; i++) {
+            out.append(prefix).append(lines[start + i]).append('\n');
+        }
+        if (count > limit) {
+            out.append(prefix).append("... ").append(count - limit).append(" more line(s)\n");
+        }
+    }
+
+    private String[] splitLines(String value) {
+        return value.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1);
+    }
+
+    private int commonPrefix(String[] a, String[] b) {
+        int limit = Math.min(a.length, b.length);
+        int i = 0;
+        while (i < limit && a[i].equals(b[i])) {
+            i++;
+        }
+        return i;
+    }
+
+    private int commonSuffix(String[] a, String[] b, int prefix) {
+        int i = 0;
+        while (a.length - 1 - i >= prefix
+                && b.length - 1 - i >= prefix
+                && a[a.length - 1 - i].equals(b[b.length - 1 - i])) {
+            i++;
+        }
+        return i;
     }
 
     private void rollback(List<PendingWrite> applied) {
@@ -417,6 +562,9 @@ public class CodeWorkspace {
     }
 
     public record PatchOperation(String path, String content, String find, String replace) {
+    }
+
+    public record CommandResult(String command, int exitCode, String output) {
     }
 
     private record PendingWrite(Path path, String newContent, String oldContent) {

@@ -13,6 +13,7 @@ class JobProgress {
     required this.progress,
     this.resultAssetId,
     this.error,
+    this.logLine,
   });
 
   final String id;
@@ -21,6 +22,7 @@ class JobProgress {
   final int progress;
   final String? resultAssetId;
   final String? error;
+  final String? logLine;
 
   bool get isDone => status == 'done';
   bool get isFailed => status == 'failed';
@@ -33,6 +35,7 @@ class JobProgress {
         progress: (json['progress'] as num?)?.toInt() ?? 0,
         resultAssetId: json['resultAssetId'] as String?,
         error: json['error'] as String?,
+        logLine: json['logLine'] as String?,
       );
 }
 
@@ -43,8 +46,9 @@ class JobSocket {
 
   final WebSocketChannel _channel;
 
-  Stream<JobProgress> get progress => _channel.stream.map((event) =>
-      JobProgress.fromJson(jsonDecode(event as String) as Map<String, dynamic>));
+  Stream<JobProgress> get progress =>
+      _channel.stream.map((event) => JobProgress.fromJson(
+          jsonDecode(event as String) as Map<String, dynamic>));
 
   Future<void> close() => _channel.sink.close();
 

@@ -107,7 +107,8 @@ public class AgentService {
                 }
                 if (tool.requiresApproval()) {
                     String label = tool.approvalLabel(call.arguments());
-                    pending.add(new PendingAction(tool.name(), call.arguments(), label));
+                    String preview = tool.approvalPreview(call.arguments());
+                    pending.add(new PendingAction(tool.name(), call.arguments(), label, preview));
                     steps.add(new ToolStep(tool.name(), call.arguments(),
                             "pending_approval", label, null));
                     appendToolMessage(messages, "Proposed to the user for confirmation. "

@@ -44,6 +44,14 @@ public interface CopilotTool {
     }
 
     /**
+     * Optional detail shown in the approval card before the user confirms. Patch
+     * tools use this to show a diff generated from the current workspace.
+     */
+    default String approvalPreview(JsonNode args) {
+        return null;
+    }
+
+    /**
      * Execute the tool. Long-running work is submitted to the job queue and the
      * result carries the {@code jobId} so the UI can track progress over the
      * existing job WebSocket — the agent thread never blocks on the GPU.

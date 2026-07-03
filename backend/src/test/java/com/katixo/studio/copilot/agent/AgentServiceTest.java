@@ -83,7 +83,10 @@ class AgentServiceTest {
 
         assertThat(ran.get()).isFalse();
         assertThat(resp.pendingActions()).singleElement()
-                .satisfies(p -> assertThat(p.tool()).isEqualTo("scrape"));
+                .satisfies(p -> {
+                    assertThat(p.tool()).isEqualTo("scrape");
+                    assertThat(p.preview()).isEqualTo("preview for scrape");
+                });
         assertThat(resp.steps()).singleElement()
                 .satisfies(s -> assertThat(s.status()).isEqualTo("pending_approval"));
     }
@@ -110,6 +113,11 @@ class AgentServiceTest {
             @Override
             public boolean requiresApproval() {
                 return approval;
+            }
+
+            @Override
+            public String approvalPreview(JsonNode args) {
+                return approval ? "preview for " + name : null;
             }
 
             @Override

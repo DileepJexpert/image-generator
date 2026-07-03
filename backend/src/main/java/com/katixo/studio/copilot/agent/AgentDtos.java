@@ -73,7 +73,7 @@ public final class AgentDtos {
     }
 
     /** An approval-gated action the user must confirm before it runs. */
-    public record PendingAction(String tool, JsonNode args, String label) {
+    public record PendingAction(String tool, JsonNode args, String label, String preview) {
     }
 
     /** Body for {@code POST /copilot/agent/confirm}: execute a proposed action. */

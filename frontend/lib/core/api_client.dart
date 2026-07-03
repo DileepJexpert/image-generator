@@ -43,8 +43,10 @@ class _ApiLogInterceptor extends Interceptor {
   }
 
   @override
-  void onResponse(Response<dynamic> response, ResponseInterceptorHandler handler) {
-    debugPrint('[api] ← ${response.statusCode} ${response.requestOptions.method} '
+  void onResponse(
+      Response<dynamic> response, ResponseInterceptorHandler handler) {
+    debugPrint(
+        '[api] ← ${response.statusCode} ${response.requestOptions.method} '
         '${response.requestOptions.uri} (${_elapsedMs(response.requestOptions)} ms)');
     handler.next(response);
   }
@@ -110,7 +112,10 @@ class ApiClient {
       final normalized = Map<String, dynamic>.of(scene);
       if (normalized['pages'] == null && normalized['elements'] != null) {
         normalized['pages'] = [
-          {'id': '${scene['id'] ?? id}_p0', 'elements': normalized.remove('elements')},
+          {
+            'id': '${scene['id'] ?? id}_p0',
+            'elements': normalized.remove('elements')
+          },
         ];
       }
       return Project.fromJson(normalized).ensureHasPage();
@@ -175,8 +180,8 @@ class ApiClient {
   /// Image-to-video: animate a source image into a short clip.
   Future<String> imageToVideo(
       String sourceAssetId, String prompt, int durationSeconds) async {
-    final res =
-        await _dio.post<Map<String, dynamic>>('/generate/image-to-video', data: {
+    final res = await _dio
+        .post<Map<String, dynamic>>('/generate/image-to-video', data: {
       'sourceAssetId': sourceAssetId,
       if (prompt.isNotEmpty) 'prompt': prompt,
       'durationSeconds': durationSeconds,
@@ -189,7 +194,8 @@ class ApiClient {
   /// Submits a text-to-speech job; returns the async job id. The result is an
   /// `audio` asset (WAV).
   Future<String> generateSpeech(String text, {String? voice}) async {
-    final res = await _dio.post<Map<String, dynamic>>('/generate/speech', data: {
+    final res =
+        await _dio.post<Map<String, dynamic>>('/generate/speech', data: {
       'text': text,
       if (voice != null && voice.isNotEmpty) 'voice': voice,
     });
@@ -199,8 +205,8 @@ class ApiClient {
   /// Submits a transcription job for an existing audio asset; returns the job
   /// id. The result is a `text` asset holding the transcript JSON.
   Future<String> transcribe(String assetId) async {
-    final res = await _dio.post<Map<String, dynamic>>('/transcribe',
-        data: {'assetId': assetId});
+    final res = await _dio
+        .post<Map<String, dynamic>>('/transcribe', data: {'assetId': assetId});
     return res.data!['jobId'] as String;
   }
 
@@ -397,16 +403,23 @@ class AgentStep {
 
 /// An approval-gated action the user must confirm before it runs.
 class PendingAction {
-  PendingAction({required this.tool, required this.label, required this.args});
+  PendingAction({
+    required this.tool,
+    required this.label,
+    required this.args,
+    this.preview,
+  });
 
   final String tool;
   final String label;
   final Map<String, dynamic> args;
+  final String? preview;
 
   factory PendingAction.fromJson(Map<String, dynamic> json) => PendingAction(
         tool: json['tool'] as String,
         label: json['label'] as String? ?? 'Run ${json['tool']}',
         args: (json['args'] as Map<String, dynamic>?) ?? const {},
+        preview: json['preview'] as String?,
       );
 }
 

@@ -48,6 +48,8 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
   // Jobs started by the agent's tools, tracked to completion so their results
   // land on the canvas. Progress feeds the matching step row live.
   final Map<String, int> _jobProgress = {}; // jobId -> percent (running)
+  final Map<String, List<String>> _jobLogs = {}; // jobId -> streamed log lines
+  final Map<String, String> _jobTerminal = {}; // jobId -> done | failed
   final Set<String> _finishedJobs = {}; // jobIds that landed on the canvas
   final List<JobSocket> _jobSockets = [];
   final List<StreamSubscription<JobProgress>> _jobSubs = [];
@@ -136,6 +138,9 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
     // Auto-approve: run any gated actions immediately instead of showing cards.
     if (_autoApprove) {
       for (final action in List.of(turn.pending)) {
+        if (_requiresManualReview(action)) {
+          continue;
+        }
         await _confirm(turn, action);
       }
     }
@@ -194,18 +199,52 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
     }
   }
 
+  bool _requiresManualReview(PendingAction action) => const {
+        'code_apply_patch',
+        'code_write_file',
+        'code_run_command',
+        'git_create_branch',
+        'git_push',
+        'github_create_pr',
+      }.contains(action.tool);
+
+  void _reject(_Turn turn, PendingAction action) {
+    setState(() {
+      turn.pending.remove(action);
+      turn.steps.add(AgentStep(
+        tool: action.tool,
+        status: 'rejected',
+        summary: 'Rejected: ${action.label}',
+        args: action.args,
+      ));
+    });
+  }
+
   /// Tracks a tool-started job to completion and places its result on the
   /// canvas, surfacing live progress in the panel meanwhile.
   void _trackJob(String jobId, String label) {
     final socket = JobSocket(jobId);
     _jobSockets.add(socket);
-    setState(() => _jobProgress[jobId] = 0);
+    setState(() {
+      _jobProgress[jobId] = 0;
+      _jobLogs.putIfAbsent(jobId, () => []);
+    });
 
     late final StreamSubscription<JobProgress> sub;
     sub = socket.progress.listen(
       (event) async {
         if (!mounted) return;
-        setState(() => _jobProgress[jobId] = event.progress);
+        setState(() {
+          _jobProgress[jobId] = event.progress;
+          final line = event.logLine;
+          if (line != null && line.isNotEmpty) {
+            final lines = _jobLogs.putIfAbsent(jobId, () => []);
+            lines.add(line);
+            if (lines.length > 200) {
+              lines.removeRange(0, lines.length - 200);
+            }
+          }
+        });
         if (event.isDone && event.resultAssetId != null) {
           final msg = await placeJobResultOnCanvas(ref,
               assetId: event.resultAssetId!, jobType: event.type);
@@ -213,26 +252,30 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
           // placed; non-visual results (e.g. leads JSON) just report ready.
           if (msg != null) {
             _toast(msg);
-            _endJob(jobId, socket, sub, finished: true);
+            _endJob(jobId, socket, sub, status: 'done', finished: true);
           } else {
             _toast('$label ready');
-            _endJob(jobId, socket, sub);
+            _endJob(jobId, socket, sub, status: 'done');
           }
+        } else if (event.isDone) {
+          _toast('$label done');
+          _endJob(jobId, socket, sub, status: 'done');
         } else if (event.isFailed) {
           _toast('$label failed: ${event.error ?? ''}');
-          _endJob(jobId, socket, sub);
+          _endJob(jobId, socket, sub, status: 'failed');
         }
       },
       onError: (Object e) {
         _toast('$label error: $e');
-        _endJob(jobId, socket, sub);
+        _endJob(jobId, socket, sub, status: 'failed');
       },
     );
     _jobSubs.add(sub);
   }
 
-  void _endJob(String jobId, JobSocket socket, StreamSubscription<JobProgress> sub,
-      {bool finished = false}) {
+  void _endJob(
+      String jobId, JobSocket socket, StreamSubscription<JobProgress> sub,
+      {required String status, bool finished = false}) {
     sub.cancel();
     socket.close();
     _jobSubs.remove(sub);
@@ -240,6 +283,7 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
     if (mounted) {
       setState(() {
         _jobProgress.remove(jobId);
+        _jobTerminal[jobId] = status;
         if (finished) _finishedJobs.add(jobId);
       });
     }
@@ -258,6 +302,7 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
         'upscale_image' => 'Upscaling',
         'image_to_video' => 'Rendering video',
         'scrape_leads' => 'Finding leads',
+        'code_run_command' => 'Running command',
         _ => 'Working',
       };
 
@@ -296,8 +341,7 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
               children: [
                 const Icon(Icons.smart_toy_outlined, size: 20),
                 const SizedBox(width: 8),
-                Text('Copilot',
-                    style: Theme.of(context).textTheme.titleMedium),
+                Text('Copilot', style: Theme.of(context).textTheme.titleMedium),
                 const Spacer(),
                 if (_turns.isNotEmpty)
                   IconButton(
@@ -322,9 +366,8 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
                 ButtonSegment(value: false, label: Text('Chat')),
               ],
               selected: {_agentMode},
-              onSelectionChanged: _sending
-                  ? null
-                  : (s) => setState(() => _agentMode = s.first),
+              onSelectionChanged:
+                  _sending ? null : (s) => setState(() => _agentMode = s.first),
             ),
           ),
           if (_agentMode)
@@ -364,7 +407,10 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
                         return _Bubble(
                           turn: turn,
                           onConfirm: (a) => _confirm(turn, a),
+                          onReject: (a) => _reject(turn, a),
                           jobProgress: _jobProgress,
+                          jobLogs: _jobLogs,
+                          jobTerminal: _jobTerminal,
                           finishedJobs: _finishedJobs,
                         );
                       },
@@ -375,7 +421,8 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Text(_error!,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12)),
+                  style:
+                      const TextStyle(color: Colors.redAccent, fontSize: 12)),
             ),
           if (_sending && _streaming.isEmpty)
             Padding(
@@ -462,12 +509,18 @@ class _Bubble extends StatelessWidget {
   const _Bubble({
     required this.turn,
     this.onConfirm,
+    this.onReject,
     this.jobProgress = const {},
+    this.jobLogs = const {},
+    this.jobTerminal = const {},
     this.finishedJobs = const {},
   });
   final _Turn turn;
   final void Function(PendingAction action)? onConfirm;
+  final void Function(PendingAction action)? onReject;
   final Map<String, int> jobProgress; // live percent for running tool jobs
+  final Map<String, List<String>> jobLogs; // streamed output by job id
+  final Map<String, String> jobTerminal; // done | failed by job id
   final Set<String> finishedJobs; // jobs whose result reached the canvas
 
   @override
@@ -492,6 +545,11 @@ class _Bubble extends StatelessWidget {
                 step: step,
                 jobProgress:
                     step.jobId != null ? jobProgress[step.jobId] : null,
+                logLines: step.jobId != null
+                    ? jobLogs[step.jobId] ?? const []
+                    : const [],
+                terminalStatus:
+                    step.jobId != null ? jobTerminal[step.jobId] : null,
                 finished:
                     step.jobId != null && finishedJobs.contains(step.jobId),
               ),
@@ -501,8 +559,8 @@ class _Bubble extends StatelessWidget {
             for (final action in turn.pending)
               _ApprovalCard(
                 action: action,
-                onConfirm:
-                    onConfirm == null ? null : () => onConfirm!(action),
+                onConfirm: onConfirm == null ? null : () => onConfirm!(action),
+                onReject: onReject == null ? null : () => onReject!(action),
               ),
             if (!isUser && turn.content.isNotEmpty)
               Align(
@@ -532,9 +590,17 @@ class _Bubble extends StatelessWidget {
 /// started a background job, it reflects that job's live progress (and a check
 /// once the result has landed on the canvas).
 class _StepRow extends StatelessWidget {
-  const _StepRow({required this.step, this.jobProgress, this.finished = false});
+  const _StepRow({
+    required this.step,
+    this.jobProgress,
+    this.logLines = const [],
+    this.terminalStatus,
+    this.finished = false,
+  });
   final AgentStep step;
   final int? jobProgress; // non-null while the step's job is running
+  final List<String> logLines;
+  final String? terminalStatus; // done | failed for completed command jobs
   final bool finished; // job completed and result placed
 
   @override
@@ -551,13 +617,16 @@ class _StepRow extends StatelessWidget {
         ),
       );
     } else {
-      final (icon, color) = finished
+      final (icon, color) = finished || terminalStatus == 'done'
           ? (Icons.check_circle, Colors.green)
-          : switch (step.status) {
-              'failed' => (Icons.error_outline, Colors.redAccent),
-              'pending_approval' => (Icons.schedule, Colors.orangeAccent),
-              _ => (Icons.check_circle_outline, Colors.green),
-            };
+          : terminalStatus == 'failed'
+              ? (Icons.error_outline, Colors.redAccent)
+              : switch (step.status) {
+                  'failed' => (Icons.error_outline, Colors.redAccent),
+                  'rejected' => (Icons.cancel_outlined, Colors.redAccent),
+                  'pending_approval' => (Icons.schedule, Colors.orangeAccent),
+                  _ => (Icons.check_circle_outline, Colors.green),
+                };
       leading = Icon(icon, size: 14, color: color);
     }
 
@@ -565,22 +634,65 @@ class _StepRow extends StatelessWidget {
         ? '  ${jobProgress!}%'
         : finished
             ? '  · added to canvas'
-            : '';
+            : terminalStatus == 'done'
+                ? '  done'
+                : terminalStatus == 'failed'
+                    ? '  failed'
+                    : '';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          leading,
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              '${step.summary.isEmpty ? step.tool : step.summary}$suffix',
-              style: const TextStyle(fontSize: 12),
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              leading,
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  '${step.summary.isEmpty ? step.tool : step.summary}$suffix',
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ),
+            ],
           ),
+          if (logLines.isNotEmpty) _CommandLog(lines: logLines),
         ],
+      ),
+    );
+  }
+}
+
+class _CommandLog extends StatelessWidget {
+  const _CommandLog({required this.lines});
+  final List<String> lines;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(left: 20, top: 6, bottom: 4),
+      constraints: const BoxConstraints(maxHeight: 180),
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: scheme.outlineVariant),
+      ),
+      child: SingleChildScrollView(
+        reverse: true,
+        padding: const EdgeInsets.all(8),
+        child: SelectableText(
+          lines.join('\n'),
+          style: TextStyle(
+            fontFamily: 'monospace',
+            fontSize: 11,
+            color: scheme.onSurfaceVariant,
+            height: 1.25,
+          ),
+        ),
       ),
     );
   }
@@ -588,13 +700,15 @@ class _StepRow extends StatelessWidget {
 
 /// An approval gate for an outbound/irreversible action the agent proposed.
 class _ApprovalCard extends StatelessWidget {
-  const _ApprovalCard({required this.action, this.onConfirm});
+  const _ApprovalCard({required this.action, this.onConfirm, this.onReject});
   final PendingAction action;
   final VoidCallback? onConfirm;
+  final VoidCallback? onReject;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final preview = action.preview?.trim();
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(8),
@@ -617,19 +731,67 @@ class _ApprovalCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(action.label, style: const TextStyle(fontSize: 12)),
+          if (preview != null && preview.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _PatchPreview(text: preview),
+          ],
           const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.tonalIcon(
-              onPressed: onConfirm,
-              style: FilledButton.styleFrom(
-                visualDensity: VisualDensity.compact,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton.icon(
+                onPressed: onReject,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.close, size: 16),
+                label: const Text('Reject'),
               ),
-              icon: const Icon(Icons.play_arrow, size: 16),
-              label: const Text('Run'),
-            ),
+              const SizedBox(width: 6),
+              FilledButton.tonalIcon(
+                onPressed: onConfirm,
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                icon: const Icon(Icons.play_arrow, size: 16),
+                label: const Text('Run'),
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PatchPreview extends StatelessWidget {
+  const _PatchPreview({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 220),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: 0.55),
+        border: Border.all(color: scheme.outlineVariant),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(8),
+        scrollDirection: Axis.horizontal,
+        child: SingleChildScrollView(
+          child: SelectableText(
+            text,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 11,
+              height: 1.25,
+            ),
+          ),
+        ),
       ),
     );
   }

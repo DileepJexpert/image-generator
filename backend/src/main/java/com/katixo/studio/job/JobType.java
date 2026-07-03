@@ -10,7 +10,8 @@ public enum JobType {
     LESSON("lesson"),
     TEXT_TO_SPEECH("text_to_speech"),
     TRANSCRIBE("transcribe"),
-    LEAD_SCRAPE("lead_scrape");
+    LEAD_SCRAPE("lead_scrape"),
+    CODE_COMMAND("code_command");
 
     private final String value;
 

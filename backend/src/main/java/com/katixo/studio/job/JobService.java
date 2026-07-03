@@ -50,6 +50,12 @@ public class JobService {
         progressSocket.broadcast(JobDto.from(repository.save(job)));
     }
 
+    @Transactional(readOnly = true)
+    public void publishLog(UUID id, String line) {
+        Job job = require(id);
+        progressSocket.broadcast(JobDto.log(job, line));
+    }
+
     @Transactional
     public void markDone(UUID id, UUID resultAssetId) {
         Job job = require(id);

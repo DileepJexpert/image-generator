@@ -12,7 +12,8 @@ public record JobDto(
         String status,
         int progress,
         UUID resultAssetId,
-        String error
+        String error,
+        String logLine
 ) {
     public static JobDto from(Job job) {
         return new JobDto(
@@ -21,7 +22,20 @@ public record JobDto(
                 job.getStatus().value(),
                 job.getProgress(),
                 job.getResultAssetId(),
-                job.getError()
+                job.getError(),
+                null
+        );
+    }
+
+    public static JobDto log(Job job, String line) {
+        return new JobDto(
+                job.getId(),
+                job.getType().value(),
+                job.getStatus().value(),
+                job.getProgress(),
+                job.getResultAssetId(),
+                job.getError(),
+                line
         );
     }
 }

@@ -79,24 +79,37 @@ public class CodeApplyPatchTool implements CopilotTool {
     }
 
     @Override
+    public String approvalPreview(JsonNode args) {
+        try {
+            return workspace.previewPatch(parseOperations(args));
+        } catch (Exception e) {
+            return "Patch preview unavailable: " + e.getMessage();
+        }
+    }
+
+    @Override
     public ToolResult execute(JsonNode args) {
         try {
-            JsonNode opsNode = args.path("operations");
-            if (!opsNode.isArray()) {
-                throw new IllegalArgumentException("operations must be an array");
-            }
-            List<PatchOperation> operations = new ArrayList<>();
-            for (JsonNode node : opsNode) {
-                operations.add(new PatchOperation(
-                        Args.requireText(node, "path"),
-                        optionalString(node, "content"),
-                        optionalString(node, "find"),
-                        optionalString(node, "replace")));
-            }
-            return ToolResult.text(workspace.applyPatch(operations));
+            return ToolResult.text(workspace.applyPatch(parseOperations(args)));
         } catch (Exception e) {
             return ToolResult.text("code_apply_patch failed: " + e.getMessage());
         }
+    }
+
+    private List<PatchOperation> parseOperations(JsonNode args) {
+        JsonNode opsNode = args.path("operations");
+        if (!opsNode.isArray()) {
+            throw new IllegalArgumentException("operations must be an array");
+        }
+        List<PatchOperation> operations = new ArrayList<>();
+        for (JsonNode node : opsNode) {
+            operations.add(new PatchOperation(
+                    Args.requireText(node, "path"),
+                    optionalString(node, "content"),
+                    optionalString(node, "find"),
+                    optionalString(node, "replace")));
+        }
+        return operations;
     }
 
     private String optionalString(JsonNode node, String field) {

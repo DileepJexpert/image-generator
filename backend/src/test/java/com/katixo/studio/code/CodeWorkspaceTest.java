@@ -79,6 +79,28 @@ class CodeWorkspaceTest {
     }
 
     @Test
+    void previewsPatchWithoutWritingFiles() throws Exception {
+        Files.writeString(temp.resolve("one.txt"), "alpha\nold\nomega\n");
+        CodeWorkspace workspace = new CodeWorkspace(temp.toString(), 20_000, 5);
+
+        String preview = workspace.previewPatch(List.of(
+                new CodeWorkspace.PatchOperation("one.txt", null, "old", "new"),
+                new CodeWorkspace.PatchOperation("two.txt", "created\n", null, null)
+        ));
+
+        assertThat(preview)
+                .contains("Patch preview: 2 file(s)")
+                .contains("diff -- one.txt")
+                .contains("-old")
+                .contains("+new")
+                .contains("diff -- two.txt")
+                .contains("+++ b/two.txt")
+                .contains("+created");
+        assertThat(Files.readString(temp.resolve("one.txt"))).isEqualTo("alpha\nold\nomega\n");
+        assertThat(temp.resolve("two.txt")).doesNotExist();
+    }
+
+    @Test
     void rejectsDuplicateOrAmbiguousPatchOperationsBeforeWriting() throws Exception {
         Files.writeString(temp.resolve("one.txt"), "same same\n");
         Files.writeString(temp.resolve("two.txt"), "untouched\n");
