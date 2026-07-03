@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -37,16 +38,62 @@ public class GitClient {
         return dir.isDirectory() && new File(dir, ".git").exists();
     }
 
+    /** Short status for the configured repository. */
+    public String status() throws IOException, InterruptedException {
+        return run(List.of("git", "status", "--short", "--branch")).trim();
+    }
+
+    /** Current branch name. */
+    public String currentBranch() throws IOException, InterruptedException {
+        return run(List.of("git", "branch", "--show-current")).lines()
+                .filter(line -> !line.startsWith("$ "))
+                .findFirst()
+                .orElse("")
+                .trim();
+    }
+
+    /** Create and check out a new branch from the current HEAD. */
+    public String createAndCheckoutBranch(String branch) throws IOException, InterruptedException {
+        String safeBranch = requireBranch(branch);
+        return run(List.of("git", "switch", "-c", safeBranch)).trim();
+    }
+
     /** Stage all changes, commit with {@code message}, and push the current branch. */
     public String commitAndPush(String message) throws IOException, InterruptedException {
         StringBuilder log = new StringBuilder();
         log.append(run(List.of("git", "add", "-A")));
         log.append(run(List.of("git", "commit", "-m", message)));
-        log.append(run(List.of("git", "push")));
+        log.append(pushCurrentBranch());
         return log.toString().trim();
     }
 
+    /** Push current branch, setting upstream when needed. */
+    public String pushCurrentBranch() throws IOException, InterruptedException {
+        String branch = currentBranch();
+        if (branch.isBlank()) {
+            throw new IOException("Cannot push: detached HEAD or unknown current branch");
+        }
+        return run(List.of("git", "push", "-u", "origin", branch));
+    }
+
+    private String requireBranch(String branch) {
+        String b = branch == null ? "" : branch.trim();
+        if (b.isBlank()) {
+            throw new IllegalArgumentException("Missing branch name");
+        }
+        String lowered = b.toLowerCase(Locale.ROOT);
+        if (b.startsWith("-") || b.contains("..") || b.contains(" ") || lowered.contains("~")
+                || lowered.contains("^") || lowered.contains(":") || lowered.endsWith("/")
+                || lowered.endsWith(".lock")) {
+            throw new IllegalArgumentException("Unsafe branch name: " + branch);
+        }
+        return b;
+    }
+
     private String run(List<String> command) throws IOException, InterruptedException {
+        if (!isConfigured()) {
+            throw new IOException("git repo is not configured");
+        }
         Process process = new ProcessBuilder(command)
                 .directory(new File(repoDir))
                 .redirectErrorStream(true)

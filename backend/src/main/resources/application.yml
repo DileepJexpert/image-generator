@@ -63,6 +63,17 @@ katixo:
   # blank = disabled.
   git:
     repo-dir: ${GIT_REPO_DIR:}
+  # Copilot coding-agent tools. Defaults to the same configured git repo, but can
+  # be narrowed further with CODE_WORKSPACE_DIR.
+  code:
+    workspace-dir: ${CODE_WORKSPACE_DIR:${GIT_REPO_DIR:}}
+    max-file-bytes: ${CODE_MAX_FILE_BYTES:250000}
+    command-timeout-seconds: ${CODE_COMMAND_TIMEOUT_SECONDS:180}
+  # Copilot github_create_pr tool. Requires a token with pull-request permission.
+  github:
+    repository: ${GITHUB_REPOSITORY:}
+    token: ${GITHUB_TOKEN:}
+    api-url: ${GITHUB_API_URL:https://api.github.com}
 
   ai:
     # Single-GPU guard. One process now, so an in-process lock is enough — no Postgres advisory lock.

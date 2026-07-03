@@ -175,6 +175,12 @@ services:
       # Copilot LLM (VISION.md Phase 3).
       OLLAMA_URL: http://ollama:11434
       COPILOT_MODEL: qwen3
+      # Optional coding-agent integration. Bind-mount a repo and set these when
+      # you want Copilot to edit code, push branches, and open PRs.
+      GIT_REPO_DIR: ${GIT_REPO_DIR:-}
+      CODE_WORKSPACE_DIR: ${CODE_WORKSPACE_DIR:-}
+      GITHUB_REPOSITORY: ${GITHUB_REPOSITORY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     ports:
       - "8585:8585"
     volumes:
