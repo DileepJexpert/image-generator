@@ -55,6 +55,9 @@ public class GitCreateBranchTool implements CopilotTool {
         }
         try {
             return ToolResult.text(git.createAndCheckoutBranch(Args.requireText(args, "branch")));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ToolResult.text("git_create_branch interrupted: " + e.getMessage());
         } catch (Exception e) {
             return ToolResult.text("git_create_branch failed: " + e.getMessage());
         }

@@ -57,6 +57,17 @@ public class CodeWorkspace {
             "invoke-webrequest", "powershell", "cmd /c", "chmod ", "chown "
     );
 
+    /**
+     * Shell metacharacters that let a command chain, substitute, or redirect to
+     * something beyond its allowlisted prefix. Because commands run through a
+     * shell ({@code sh -lc} / {@code cmd /c}), the prefix allowlist alone is not a
+     * boundary — {@code mvn -v && whoami} starts with an allowed prefix yet runs
+     * an arbitrary second command. Rejecting these characters keeps the allowlist
+     * meaningful. A command that genuinely needs shell composition is out of scope
+     * for the agent runner and should be run by the operator directly.
+     */
+    private static final Pattern SHELL_METACHARACTERS = Pattern.compile("[&|;`$()<>\\n\\r]");
+
     private final String configuredRoot;
     private final int maxFileBytes;
     private final Duration commandTimeout;
@@ -497,6 +508,11 @@ public class CodeWorkspace {
         String c = command == null ? "" : command.trim();
         if (c.isEmpty()) {
             throw new IllegalArgumentException("Missing command");
+        }
+        if (SHELL_METACHARACTERS.matcher(c).find()) {
+            throw new IllegalArgumentException(
+                    "Command may not contain shell operators (& | ; ` $ ( ) < >); "
+                            + "run a single build/test/git command per call");
         }
         String lowered = " " + c.toLowerCase(Locale.ROOT) + " ";
         for (String denied : COMMAND_DENYLIST) {

@@ -64,6 +64,20 @@ class CodeWorkspaceTest {
     }
 
     @Test
+    void rejectsShellChainingPastAnAllowedPrefix() {
+        CodeWorkspace workspace = new CodeWorkspace(temp.toString(), 20_000, 5);
+
+        assertThatThrownBy(() -> workspace.runCommand("mvn -v && whoami", null))
+                .hasMessageContaining("shell operators");
+        assertThatThrownBy(() -> workspace.runCommand("git status; cat secrets", null))
+                .hasMessageContaining("shell operators");
+        assertThatThrownBy(() -> workspace.runCommand("mvn -v `whoami`", null))
+                .hasMessageContaining("shell operators");
+        assertThatThrownBy(() -> workspace.runCommand("git log > /tmp/out", null))
+                .hasMessageContaining("shell operators");
+    }
+
+    @Test
     void appliesMixedMultiFilePatchInOneCall() throws Exception {
         Files.writeString(temp.resolve("one.txt"), "hello old\n");
         CodeWorkspace workspace = new CodeWorkspace(temp.toString(), 20_000, 5);

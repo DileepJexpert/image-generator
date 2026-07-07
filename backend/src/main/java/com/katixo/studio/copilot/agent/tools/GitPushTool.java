@@ -63,6 +63,9 @@ public class GitPushTool implements CopilotTool {
         }
         try {
             return ToolResult.text("Pushed.\n" + git.commitAndPush(message));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ToolResult.text("git push interrupted: " + e.getMessage());
         } catch (Exception e) {
             return ToolResult.text("git push failed: " + e.getMessage());
         }

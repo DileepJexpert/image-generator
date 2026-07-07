@@ -10,10 +10,14 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 
 /** Minimal GitHub REST client for opening pull requests from the Copilot. */
 @Component
 public class GithubClient {
+
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
     private final String token;
     private final String repository;
@@ -31,7 +35,7 @@ public class GithubClient {
         this.repository = repository == null ? "" : repository.trim();
         this.apiUrl = apiUrl == null ? "https://api.github.com" : apiUrl.stripTrailing();
         this.mapper = mapper;
-        this.http = HttpClient.newHttpClient();
+        this.http = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
     }
 
     public boolean isConfigured() {
@@ -57,6 +61,7 @@ public class GithubClient {
                 .header("Accept", "application/vnd.github+json")
                 .header("Authorization", "Bearer " + token)
                 .header("X-GitHub-Api-Version", "2022-11-28")
+                .timeout(REQUEST_TIMEOUT)
                 .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(payload)))
                 .build();
 
