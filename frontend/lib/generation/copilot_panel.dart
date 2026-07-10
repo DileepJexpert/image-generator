@@ -199,14 +199,16 @@ class _CopilotPanelState extends ConsumerState<CopilotPanel> {
     }
   }
 
-  bool _requiresManualReview(PendingAction action) => const {
-        'code_apply_patch',
-        'code_write_file',
-        'code_run_command',
-        'git_create_branch',
-        'git_push',
-        'github_create_pr',
-      }.contains(action.tool);
+  /// Code, git, and GitHub actions always show a review card, even in
+  /// auto-approve mode — they write files or reach a remote, so a human should
+  /// see them first. Prefix-based so new tools in these families are covered
+  /// without having to remember to list them here.
+  bool _requiresManualReview(PendingAction action) {
+    final tool = action.tool;
+    return tool.startsWith('code_') ||
+        tool.startsWith('git_') ||
+        tool.startsWith('github_');
+  }
 
   void _reject(_Turn turn, PendingAction action) {
     setState(() {
