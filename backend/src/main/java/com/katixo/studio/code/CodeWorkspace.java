@@ -153,6 +153,34 @@ public class CodeWorkspace {
         return "Wrote " + bytes.length + " bytes to " + relative(file) + ".";
     }
 
+    public String deleteFile(String path) throws IOException {
+        requireConfigured();
+        Path file = resolve(path);
+        if (Files.isDirectory(file)) {
+            throw new IllegalArgumentException("Refusing to delete a directory through the agent: " + relative(file));
+        }
+        if (!Files.exists(file)) {
+            throw new IllegalArgumentException("Not a file: " + path);
+        }
+        Files.delete(file);
+        return "Deleted " + relative(file) + ".";
+    }
+
+    public String moveFile(String from, String to) throws IOException {
+        requireConfigured();
+        Path source = resolve(from);
+        if (!Files.isRegularFile(source)) {
+            throw new IllegalArgumentException("Not a file: " + from);
+        }
+        Path target = resolve(to);
+        if (Files.exists(target)) {
+            throw new IllegalArgumentException("Destination already exists: " + relative(target));
+        }
+        Files.createDirectories(target.getParent());
+        Files.move(source, target);
+        return "Moved " + relative(source) + " -> " + relative(target) + ".";
+    }
+
     public String applyPatch(List<PatchOperation> operations) throws IOException {
         requireConfigured();
         List<PendingWrite> writes = preparePatch(operations);

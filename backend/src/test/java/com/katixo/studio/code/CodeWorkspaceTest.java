@@ -78,6 +78,35 @@ class CodeWorkspaceTest {
     }
 
     @Test
+    void deletesAFileButRefusesDirectoriesAndTraversal() throws Exception {
+        Files.writeString(temp.resolve("gone.txt"), "bye\n");
+        Files.createDirectories(temp.resolve("pkg"));
+        CodeWorkspace workspace = new CodeWorkspace(temp.toString(), 20_000, 5);
+
+        assertThat(workspace.deleteFile("gone.txt")).contains("Deleted gone.txt");
+        assertThat(temp.resolve("gone.txt")).doesNotExist();
+
+        assertThatThrownBy(() -> workspace.deleteFile("pkg")).hasMessageContaining("directory");
+        assertThatThrownBy(() -> workspace.deleteFile("../secret.txt")).hasMessageContaining("escapes");
+        assertThatThrownBy(() -> workspace.deleteFile("missing.txt")).hasMessageContaining("Not a file");
+    }
+
+    @Test
+    void movesAFileButRefusesOverwriteAndMissingSource() throws Exception {
+        Files.writeString(temp.resolve("old.txt"), "content\n");
+        Files.writeString(temp.resolve("occupied.txt"), "taken\n");
+        CodeWorkspace workspace = new CodeWorkspace(temp.toString(), 20_000, 5);
+
+        assertThat(workspace.moveFile("old.txt", "nested/new.txt")).contains("Moved old.txt -> nested/new.txt");
+        assertThat(temp.resolve("old.txt")).doesNotExist();
+        assertThat(Files.readString(temp.resolve("nested/new.txt"))).isEqualTo("content\n");
+
+        assertThatThrownBy(() -> workspace.moveFile("missing.txt", "x.txt")).hasMessageContaining("Not a file");
+        assertThatThrownBy(() -> workspace.moveFile("occupied.txt", "nested/new.txt"))
+                .hasMessageContaining("already exists");
+    }
+
+    @Test
     void appliesMixedMultiFilePatchInOneCall() throws Exception {
         Files.writeString(temp.resolve("one.txt"), "hello old\n");
         CodeWorkspace workspace = new CodeWorkspace(temp.toString(), 20_000, 5);

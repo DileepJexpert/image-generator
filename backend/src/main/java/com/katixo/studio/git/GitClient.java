@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -67,6 +68,26 @@ public class GitClient {
         return log.toString().trim();
     }
 
+    /**
+     * Stage only {@code paths} and commit them with {@code message}. Does not push,
+     * and does not touch any other modified file — the scoped counterpart to
+     * {@link #commitAndPush(String)}'s {@code git add -A}.
+     */
+    public String commitPaths(String message, List<String> paths)
+            throws IOException, InterruptedException {
+        String safeMessage = requireMessage(message);
+        List<String> safePaths = requirePaths(paths);
+        List<String> add = new ArrayList<>(List.of("git", "add", "--"));
+        add.addAll(safePaths);
+        List<String> commit = new ArrayList<>(List.of("git", "commit", "-m", safeMessage, "--"));
+        commit.addAll(safePaths);
+
+        StringBuilder log = new StringBuilder();
+        log.append(run(add));
+        log.append(run(commit));
+        return log.toString().trim();
+    }
+
     /** Push current branch, setting upstream when needed. */
     public String pushCurrentBranch() throws IOException, InterruptedException {
         String branch = currentBranch();
@@ -74,6 +95,38 @@ public class GitClient {
             throw new IOException("Cannot push: detached HEAD or unknown current branch");
         }
         return run(List.of("git", "push", "-u", "origin", branch));
+    }
+
+    private String requireMessage(String message) {
+        String m = message == null ? "" : message.trim();
+        if (m.isBlank()) {
+            throw new IllegalArgumentException("Missing commit message");
+        }
+        return m;
+    }
+
+    /** Validates that every path is a safe, repo-relative pathspec (no flags, no traversal). */
+    private List<String> requirePaths(List<String> paths) {
+        if (paths == null || paths.isEmpty()) {
+            throw new IllegalArgumentException("Missing paths to commit");
+        }
+        List<String> safe = new ArrayList<>();
+        for (String raw : paths) {
+            String p = raw == null ? "" : raw.trim().replace('\\', '/');
+            if (p.isBlank()) {
+                throw new IllegalArgumentException("Empty path in commit list");
+            }
+            if (p.startsWith("-") || p.startsWith("/") || p.contains(":")) {
+                throw new IllegalArgumentException("Unsafe path (must be repo-relative): " + raw);
+            }
+            for (String part : p.split("/")) {
+                if (part.equals("..") || part.equals(".git")) {
+                    throw new IllegalArgumentException("Path escapes the repository or targets .git: " + raw);
+                }
+            }
+            safe.add(p);
+        }
+        return safe;
     }
 
     private String requireBranch(String branch) {

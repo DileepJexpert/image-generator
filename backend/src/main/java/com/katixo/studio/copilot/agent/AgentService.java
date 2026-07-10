@@ -48,10 +48,12 @@ public class AgentService {
             work, inspect with code_search/code_read_file first, make small \
             targeted edits with code_apply_patch when touching multiple files \
             or code_write_file for one complete file, then run focused checks \
-            with code_run_command. Do not guess file contents.
+            with code_run_command. Remove files with code_delete_file and rename \
+            or move them with code_move_file. Do not guess file contents.
             - Use git_status before committing. Create a task branch with \
-            git_create_branch when starting PR-bound work. After edits and tests, \
-            git_push can commit and push, and github_create_pr can open a pull \
+            git_create_branch when starting PR-bound work. Prefer git_commit with \
+            the exact files you changed to commit just your work; git_push commits \
+            all changes and pushes the branch. github_create_pr opens a pull \
             request. Never claim a PR exists until github_create_pr returns a URL.
             - Generation and editing run as background jobs: a tool returns a jobId \
             and the studio tracks progress. After calling such a tool, tell the \

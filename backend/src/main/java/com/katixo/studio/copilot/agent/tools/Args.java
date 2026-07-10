@@ -2,6 +2,8 @@ package com.katixo.studio.copilot.agent.tools;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -29,6 +31,29 @@ final class Args {
             throw new IllegalArgumentException("Missing required argument: " + field);
         }
         return s;
+    }
+
+    /**
+     * Reads a field as a list of non-blank strings. Accepts a JSON array, or a
+     * single string (some local models pass one path unwrapped). Never null.
+     */
+    static List<String> stringList(JsonNode args, String field) {
+        JsonNode n = args.path(field);
+        List<String> out = new ArrayList<>();
+        if (n.isArray()) {
+            for (JsonNode item : n) {
+                String s = item.asText("").trim();
+                if (!s.isEmpty()) {
+                    out.add(s);
+                }
+            }
+        } else if (n.isTextual()) {
+            String s = n.asText("").trim();
+            if (!s.isEmpty()) {
+                out.add(s);
+            }
+        }
+        return out;
     }
 
     static int clampedInt(JsonNode args, String field, int fallback, int min, int max) {
