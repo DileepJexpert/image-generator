@@ -27,11 +27,34 @@ class WorkspaceCheckStatusTest {
     }
 
     @Test
-    void failingCheckIsNotGreen() {
+    void failingCheckBlocksPushUntilItPasses() {
         WorkspaceCheckStatus status = new WorkspaceCheckStatus();
         status.recordCommandResult("flutter test", false);
+
         assertThat(status.isGreen()).isFalse();
-        assertThat(status.advisory()).contains("last check failed");
+        assertThat(status.pushBlockReason()).isPresent();
+        assertThat(status.pushBlockReason().get()).contains("flutter test");
+        assertThat(status.advisory()).contains("blocked");
+
+        status.recordCommandResult("flutter test", true);
+        assertThat(status.pushBlockReason()).isEmpty();
+    }
+
+    @Test
+    void noCheckOrPassingCheckDoesNotBlockPush() {
+        WorkspaceCheckStatus status = new WorkspaceCheckStatus();
+        assertThat(status.pushBlockReason()).isEmpty(); // NONE: warn, don't block
+
+        status.recordCommandResult("mvnw test", true);
+        assertThat(status.pushBlockReason()).isEmpty();
+    }
+
+    @Test
+    void runningCheckIsReportedAndDoesNotBlock() {
+        WorkspaceCheckStatus status = new WorkspaceCheckStatus();
+        status.recordCheckStarted("mvnw verify");
+        assertThat(status.advisory()).contains("check is running").contains("mvnw verify");
+        assertThat(status.pushBlockReason()).isEmpty();
     }
 
     @Test

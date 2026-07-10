@@ -76,6 +76,10 @@ public class GitCommitTool implements CopilotTool {
             return ToolResult.text("git_commit is not configured. Set katixo.git.repo-dir to a git "
                     + "repository path to enable it.");
         }
+        var blocked = checkStatus.pushBlockReason();
+        if (blocked.isPresent()) {
+            return ToolResult.text("Commit blocked: " + blocked.get() + ".");
+        }
         try {
             return ToolResult.text("Committed.\n" + git.commitPaths(message, paths));
         } catch (InterruptedException e) {

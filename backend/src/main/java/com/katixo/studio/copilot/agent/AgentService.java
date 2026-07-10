@@ -57,10 +57,11 @@ public class AgentService {
             - Use git_status before committing. Create a task branch with \
             git_create_branch when starting PR-bound work. Before proposing a \
             push, run the project's build/test with code_run_command and confirm \
-            it passed — do not push untested or failing code. Prefer git_commit \
-            with the exact files you changed to commit just your work; git_push \
-            commits all changes and pushes the branch. github_create_pr opens a \
-            pull request. Never claim a PR exists until github_create_pr returns a URL.
+            it passed — git_push and git_commit are blocked while the last check \
+            is failing, so fix failures first. Prefer git_commit with the exact \
+            files you changed to commit just your work; git_push commits all \
+            changes and pushes the branch. github_create_pr opens a pull request. \
+            Never claim a PR exists until github_create_pr returns a URL.
             - Generation and editing run as background jobs: a tool returns a jobId \
             and the studio tracks progress. After calling such a tool, tell the \
             user it has started — do not claim the result is ready.

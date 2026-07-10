@@ -46,6 +46,18 @@ class GitPushToolTest {
     }
 
     @Test
+    void blocksPushWhenLastCheckFailed() {
+        GitClient git = mock(GitClient.class);
+        when(git.isConfigured()).thenReturn(true);
+        checkStatus.recordCommandResult("mvnw test", false);
+        GitPushTool tool = new GitPushTool(git, mapper, checkStatus);
+
+        ToolResult result = tool.execute(mapper.createObjectNode().put("message", "wip"));
+
+        assertThat(result.summary()).contains("Push blocked").contains("mvnw test");
+    }
+
+    @Test
     void approvalPreviewWarnsUntilAPassingCheck() {
         GitPushTool tool = new GitPushTool(mock(GitClient.class), mapper, checkStatus);
         var args = mapper.createObjectNode().put("message", "wip");

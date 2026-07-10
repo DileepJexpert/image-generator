@@ -17,15 +17,19 @@ public class CodeCommandService {
     private final JobService jobService;
     private final JobQueue jobQueue;
     private final ObjectMapper objectMapper;
+    private final WorkspaceCheckStatus checkStatus;
 
-    public CodeCommandService(JobService jobService, JobQueue jobQueue, ObjectMapper objectMapper) {
+    public CodeCommandService(JobService jobService, JobQueue jobQueue, ObjectMapper objectMapper,
+                              WorkspaceCheckStatus checkStatus) {
         this.jobService = jobService;
         this.jobQueue = jobQueue;
         this.objectMapper = objectMapper;
+        this.checkStatus = checkStatus;
     }
 
     public UUID submit(CodeCommandRequest request) {
         Job job = jobService.create(JobType.CODE_COMMAND, toJson(request));
+        checkStatus.recordCheckStarted(request.command());
         jobQueue.enqueue(job.getId());
         return job.getId();
     }

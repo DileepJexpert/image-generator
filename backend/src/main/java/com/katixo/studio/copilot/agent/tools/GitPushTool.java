@@ -69,6 +69,10 @@ public class GitPushTool implements CopilotTool {
             return ToolResult.text("git_push is not configured. Set katixo.git.repo-dir to a git "
                     + "repository path (with a configured remote) to enable it.");
         }
+        var blocked = checkStatus.pushBlockReason();
+        if (blocked.isPresent()) {
+            return ToolResult.text("Push blocked: " + blocked.get() + ".");
+        }
         try {
             return ToolResult.text("Pushed.\n" + git.commitAndPush(message));
         } catch (InterruptedException e) {
