@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.katixo.studio.code.CodeWorkspace;
 import com.katixo.studio.code.CodeWorkspace.PatchOperation;
+import com.katixo.studio.code.WorkspaceCheckStatus;
 import com.katixo.studio.copilot.agent.CopilotTool;
 import com.katixo.studio.copilot.agent.ToolResult;
 import org.springframework.stereotype.Component;
@@ -21,10 +22,12 @@ public class CodeApplyPatchTool implements CopilotTool {
 
     private final CodeWorkspace workspace;
     private final ObjectMapper mapper;
+    private final WorkspaceCheckStatus checkStatus;
 
-    public CodeApplyPatchTool(CodeWorkspace workspace, ObjectMapper mapper) {
+    public CodeApplyPatchTool(CodeWorkspace workspace, ObjectMapper mapper, WorkspaceCheckStatus checkStatus) {
         this.workspace = workspace;
         this.mapper = mapper;
+        this.checkStatus = checkStatus;
     }
 
     @Override
@@ -90,7 +93,9 @@ public class CodeApplyPatchTool implements CopilotTool {
     @Override
     public ToolResult execute(JsonNode args) {
         try {
-            return ToolResult.text(workspace.applyPatch(parseOperations(args)));
+            String result = workspace.applyPatch(parseOperations(args));
+            checkStatus.recordEdit();
+            return ToolResult.text(result);
         } catch (Exception e) {
             return ToolResult.text("code_apply_patch failed: " + e.getMessage());
         }

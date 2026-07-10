@@ -15,11 +15,14 @@ public class CodeCommandHandler implements JobHandler {
     private final CodeWorkspace workspace;
     private final JobService jobService;
     private final ObjectMapper objectMapper;
+    private final WorkspaceCheckStatus checkStatus;
 
-    public CodeCommandHandler(CodeWorkspace workspace, JobService jobService, ObjectMapper objectMapper) {
+    public CodeCommandHandler(CodeWorkspace workspace, JobService jobService, ObjectMapper objectMapper,
+                              WorkspaceCheckStatus checkStatus) {
         this.workspace = workspace;
         this.jobService = jobService;
         this.objectMapper = objectMapper;
+        this.checkStatus = checkStatus;
     }
 
     @Override
@@ -35,6 +38,7 @@ public class CodeCommandHandler implements JobHandler {
                 request.command(),
                 request.directory(),
                 line -> jobService.publishLog(job.getId(), line));
+        checkStatus.recordCommandResult(request.command(), result.exitCode() == 0);
         if (result.exitCode() == 0) {
             jobService.markDone(job.getId(), null);
         } else {

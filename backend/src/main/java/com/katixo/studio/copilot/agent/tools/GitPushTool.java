@@ -2,6 +2,7 @@ package com.katixo.studio.copilot.agent.tools;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.katixo.studio.code.WorkspaceCheckStatus;
 import com.katixo.studio.copilot.agent.CopilotTool;
 import com.katixo.studio.copilot.agent.ToolResult;
 import com.katixo.studio.copilot.agent.ToolSchema;
@@ -19,10 +20,12 @@ public class GitPushTool implements CopilotTool {
 
     private final GitClient git;
     private final ObjectMapper mapper;
+    private final WorkspaceCheckStatus checkStatus;
 
-    public GitPushTool(GitClient git, ObjectMapper mapper) {
+    public GitPushTool(GitClient git, ObjectMapper mapper, WorkspaceCheckStatus checkStatus) {
         this.git = git;
         this.mapper = mapper;
+        this.checkStatus = checkStatus;
     }
 
     @Override
@@ -52,6 +55,11 @@ public class GitPushTool implements CopilotTool {
     @Override
     public String approvalLabel(JsonNode args) {
         return "Commit & push to GitHub: \"" + Args.text(args, "message", "(no message)") + "\"";
+    }
+
+    @Override
+    public String approvalPreview(JsonNode args) {
+        return checkStatus.advisory();
     }
 
     @Override

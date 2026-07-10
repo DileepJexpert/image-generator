@@ -3,6 +3,7 @@ package com.katixo.studio.copilot.agent.tools;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.katixo.studio.code.CodeWorkspace;
+import com.katixo.studio.code.WorkspaceCheckStatus;
 import com.katixo.studio.copilot.agent.CopilotTool;
 import com.katixo.studio.copilot.agent.ToolResult;
 import com.katixo.studio.copilot.agent.ToolSchema;
@@ -14,10 +15,12 @@ public class CodeWriteFileTool implements CopilotTool {
 
     private final CodeWorkspace workspace;
     private final ObjectMapper mapper;
+    private final WorkspaceCheckStatus checkStatus;
 
-    public CodeWriteFileTool(CodeWorkspace workspace, ObjectMapper mapper) {
+    public CodeWriteFileTool(CodeWorkspace workspace, ObjectMapper mapper, WorkspaceCheckStatus checkStatus) {
         this.workspace = workspace;
         this.mapper = mapper;
+        this.checkStatus = checkStatus;
     }
 
     @Override
@@ -52,9 +55,11 @@ public class CodeWriteFileTool implements CopilotTool {
     @Override
     public ToolResult execute(JsonNode args) {
         try {
-            return ToolResult.text(workspace.writeFile(
+            String result = workspace.writeFile(
                     Args.requireText(args, "path"),
-                    Args.requireText(args, "content")));
+                    Args.requireText(args, "content"));
+            checkStatus.recordEdit();
+            return ToolResult.text(result);
         } catch (Exception e) {
             return ToolResult.text("code_write_file failed: " + e.getMessage());
         }

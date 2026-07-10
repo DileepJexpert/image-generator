@@ -2,6 +2,7 @@ package com.katixo.studio.copilot.agent.tools;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.katixo.studio.code.WorkspaceCheckStatus;
 import com.katixo.studio.copilot.agent.CopilotTool;
 import com.katixo.studio.copilot.agent.ToolResult;
 import com.katixo.studio.copilot.agent.ToolSchema;
@@ -20,10 +21,12 @@ public class GitCommitTool implements CopilotTool {
 
     private final GitClient git;
     private final ObjectMapper mapper;
+    private final WorkspaceCheckStatus checkStatus;
 
-    public GitCommitTool(GitClient git, ObjectMapper mapper) {
+    public GitCommitTool(GitClient git, ObjectMapper mapper, WorkspaceCheckStatus checkStatus) {
         this.git = git;
         this.mapper = mapper;
+        this.checkStatus = checkStatus;
     }
 
     @Override
@@ -59,7 +62,7 @@ public class GitCommitTool implements CopilotTool {
 
     @Override
     public String approvalPreview(JsonNode args) {
-        return String.join("\n", Args.stringList(args, "paths"));
+        return checkStatus.advisory() + "\n\n" + String.join("\n", Args.stringList(args, "paths"));
     }
 
     @Override

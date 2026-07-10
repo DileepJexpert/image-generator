@@ -33,8 +33,12 @@ import java.util.List;
 @Service
 public class AgentService {
 
-    /** Cap on LLM round-trips per turn — Cursor-style checkpoint against runaway loops. */
-    private static final int MAX_STEPS = 6;
+    /**
+     * Cap on LLM round-trips per turn — Cursor-style checkpoint against runaway
+     * loops. Sized for a real coding task (search → read → patch → check → fix →
+     * commit is already ~6), not just single-shot media actions.
+     */
+    private static final int MAX_STEPS = 12;
 
     private static final String SYSTEM_PROMPT = """
             You are Katixo Copilot, the built-in agent of Katixo Studio — a local, \
@@ -51,10 +55,12 @@ public class AgentService {
             with code_run_command. Remove files with code_delete_file and rename \
             or move them with code_move_file. Do not guess file contents.
             - Use git_status before committing. Create a task branch with \
-            git_create_branch when starting PR-bound work. Prefer git_commit with \
-            the exact files you changed to commit just your work; git_push commits \
-            all changes and pushes the branch. github_create_pr opens a pull \
-            request. Never claim a PR exists until github_create_pr returns a URL.
+            git_create_branch when starting PR-bound work. Before proposing a \
+            push, run the project's build/test with code_run_command and confirm \
+            it passed — do not push untested or failing code. Prefer git_commit \
+            with the exact files you changed to commit just your work; git_push \
+            commits all changes and pushes the branch. github_create_pr opens a \
+            pull request. Never claim a PR exists until github_create_pr returns a URL.
             - Generation and editing run as background jobs: a tool returns a jobId \
             and the studio tracks progress. After calling such a tool, tell the \
             user it has started — do not claim the result is ready.
